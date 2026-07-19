@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Album Art Fetcher — Better-Rockpod</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1.5rem;
+         background: Canvas; color: CanvasText; max-width: 70rem;
+         margin-inline: auto; }
+  h1 { font-size: 1.3rem; }
+  .muted { opacity: .65; font-size: .85rem; }
+  .album { border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas);
+           border-radius: 10px; padding: 1rem; margin: 1rem 0; }
+  .album h2 { margin: 0 0 .2rem; font-size: 1.05rem; }
+  .album.applied { opacity: .55; }
+  .badge { font-size: .75rem; padding: .15rem .5rem; border-radius: 99px;
+           border: 1px solid currentColor; margin-left: .5rem; }
+  .badge.applied { color: #2e9e4f; }
+  .badge.skipped { color: #b58900; }
+  .cands { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: .8rem; }
+  .cand { width: 140px; text-align: center; }
+  .cand img { width: 140px; height: 140px; object-fit: cover;
+              border-radius: 8px; display: block; background: #8883; }
+  .cand button { margin-top: .4rem; }
+  .cand .src { font-size: .7rem; opacity: .7; }
+  .cand .lbl { font-size: .75rem; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; }
+  button { cursor: pointer; border-radius: 6px; padding: .35rem .8rem;
+           border: 1px solid color-mix(in srgb, CanvasText 30%, Canvas);
+           background: color-mix(in srgb, CanvasText 6%, Canvas);
+           color: CanvasText; }
+  button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .row { display: flex; gap: .5rem; margin-top: .8rem; flex-wrap: wrap;
+         align-items: center; }
+  input[type=url] { flex: 1; min-width: 14rem; padding: .35rem .5rem;
+                    border-radius: 6px; border: 1px solid
+                    color-mix(in srgb, CanvasText 30%, Canvas);
+                    background: Canvas; color: CanvasText; }
+  .msg { margin-top: .5rem; font-size: .85rem; }
+  .msg.err { color: #dc2626; }
+  .msg.ok { color: #2e9e4f; }
+</style>
+</head>
+<body>
+<h1>Album Art Fetcher</h1>
+<p class="muted">Álbumes del iPod sin carátula. Elegí un candidato,
+pegá una URL o subí una imagen — nada se escribe hasta que confirmes.
+Todo se convierte a JPEG baseline (compatible con Rockbox).</p>
+<div id="albums">Cargando…</div>
+
+<script>
+"use strict";
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+function el(tag, attrs, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  e.append(...children);
+  return e;
+}
+
+function setMsg(card, text, cls) {
+  let m = card.querySelector(".msg");
+  if (!m) { m = el("div", {class: "msg"}); card.append(m); }
+  m.textContent = text;
+  m.className = "msg " + (cls || "");
+}
+
+function markApplied(card, status) {
+  card.classList.add("applied");
+  const badge = card.querySelector(".badge");
+  badge.textContent = status === "skipped" ? "omitido" : "aplicado";
+  badge.className = "badge " + status;
+  card.querySelectorAll("button, input").forEach(b => b.disabled = true);
+}
+
+async function applyUrl(card, id, url) {
+  setMsg(card, "Aplicando…");
+  try {
+    const r = await api(`/api/apply/${id}`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({url}),
+    });
+    finishApply(card, r);
+  } catch (e) { setMsg(card, "Error: " + e.message, "err"); }
+}
+
+function finishApply(card, r) {
+  if (r.errors && r.errors.length) {
+    setMsg(card, `Aplicado a ${r.done} pistas, ${r.errors.length} con error: `
+           + r.errors.map(x => x[0]).join(", "), "err");
+  } else {
+    setMsg(card, `Listo: arte aplicado a ${r.done} pistas.`, "ok");
+  }
+  if (r.status === "applied") markApplied(card, "applied");
+}
+
+async function loadCandidates(card, id) {
+  const box = card.querySelector(".cands");
+  box.textContent = "Buscando candidatos…";
+  try {
+    const cands = await api(`/api/candidates/${id}`);
+    box.textContent = "";
+    if (!cands.length) {
+      box.textContent = "Sin resultados online — probá con URL o archivo.";
+      return;
+    }
+    for (const c of cands) {
+      box.append(el("div", {class: "cand"},
+        el("img", {src: "/img?u=" + encodeURIComponent(c.thumb),
+                   loading: "lazy", alt: c.album}),
+        el("div", {class: "lbl", title: `${c.artist} — ${c.album}`},
+           c.album || "(sin título)"),
+        el("div", {class: "src"}, `${c.source} · ${c.size}px`),
+        el("button", {class: "primary",
+                      onclick: () => applyUrl(card, id, c.url)}, "Usar esta"),
+      ));
+    }
+  } catch (e) { box.textContent = "Error buscando: " + e.message; }
+}
+
+async function upload(card, id, file) {
+  setMsg(card, "Subiendo y aplicando…");
+  try {
+    const r = await api(`/api/upload/${id}`, {method: "POST", body: file});
+    finishApply(card, r);
+  } catch (e) { setMsg(card, "Error: " + e.message, "err"); }
+}
+
+async function skip(card, id) {
+  try {
+    await api(`/api/apply/${id}`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({skip: true}),
+    });
+    markApplied(card, "skipped");
+  } catch (e) { setMsg(card, "Error: " + e.message, "err"); }
+}
+
+function albumCard(a) {
+  const urlInput = el("input", {type: "url",
+                                placeholder: "…o pegá la URL de una imagen"});
+  const fileInput = el("input", {type: "file", accept: "image/*",
+                                 style: "display:none",
+    onchange: ev => ev.target.files[0]
+                    && upload(card, a.id, ev.target.files[0])});
+  const card = el("div", {class: "album", id: "album-" + a.id},
+    el("h2", {}, `${a.artist} — ${a.album}`,
+       el("span", {class: "badge"}, `${a.tracks} pistas`)),
+    el("div", {class: "muted"}, a.dirs.join(" · ")),
+    el("div", {class: "cands"}),
+    el("div", {class: "row"},
+      urlInput,
+      el("button", {onclick: () => urlInput.value
+                    && applyUrl(card, a.id, urlInput.value)}, "Usar URL"),
+      el("button", {onclick: () => fileInput.click()}, "Subir imagen"),
+      fileInput,
+      el("button", {onclick: () => skip(card, a.id)}, "Omitir"),
+    ),
+  );
+  if (a.status !== "missing") markApplied(card, a.status);
+  return card;
+}
+
+async function main() {
+  const box = document.getElementById("albums");
+  try {
+    const albums = await api("/api/albums");
+    box.textContent = "";
+    if (!albums.length) {
+      box.textContent = "🎉 Todos los álbumes tienen carátula.";
+      return;
+    }
+    for (const a of albums) {
+      const card = albumCard(a);
+      box.append(card);
+      if (a.status === "missing") loadCandidates(card, a.id);
+    }
+  } catch (e) { box.textContent = "Error: " + e.message; }
+}
+main();
+</script>
+</body>
+</html>
