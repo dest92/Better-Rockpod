@@ -13,6 +13,17 @@ This tree is a custom build for **iPod Classic 6G/7G** and **iPod Video 5G/5.5G*
 - **iPod Classic (6G/7G):** S5L8702 SoC, DesignWare USB OTG, CS42L55 codec. Config: `ipod6g`. Full feature set including MFi digital audio, SSD power management.
 - **iPod Video (5G/5.5G):** PP5022 SoC, ARC USB OTG, WM8758 codec. Config: `ipodvideo`. UI features (Cover Flow, dynamic colors, themes). MFi digital audio is ported but untested.
 
+## Development Workflow (MANDATORY)
+
+This fork uses **spec-driven development with TDD**. Before implementing any feature, behavior change, or non-trivial fix, load the `spec-dev` skill and follow it:
+
+1. **Spec first** — write `specs/NNNN-short-name.md` from `specs/TEMPLATE.md` (problem, numbered requirements, design sketch reusing existing code, acceptance criteria, test plan). Get user agreement before implementing.
+2. **Red** — for host-testable logic, add a failing unit test in `tests/` first (`make -C tests`). Extract decision logic into pure helpers to make it testable (see `unit-tests` skill).
+3. **Green** — implement the smallest change that passes.
+4. **Verify** — exercise the feature on the simulator and build both hardware targets (see `verify` skill). Tests passing is not verification.
+
+Project skills live in `.claude/skills/` (project workflow: `spec-dev`, `unit-tests`, `verify`; plus imported low-level reference skills — see `.claude/skills/README.md`).
+
 ## Build Commands
 
 Rockbox requires out-of-tree builds. Cross-compiler toolchains are built via `tools/rockboxdev.sh`.
@@ -58,9 +69,8 @@ make clean / make veryclean
 
 ## Testing
 
-There is no unit test framework. Testing is done through:
-
-- **UI Simulator** — the primary testing method. Builds with SDL2 and runs the full Rockbox stack on the host. Supports AddressSanitizer/UBSan.
+- **Host unit tests** — `make -C tests` builds and runs the fork's host-side unit tests (ASan+UBSan). See `tests/Makefile` and the `unit-tests` skill for adding tests. Upstream Rockbox has no unit test framework; this harness is fork-specific and only covers host-compilable units.
+- **UI Simulator** — the primary integration testing method. Builds with SDL2 and runs the full Rockbox stack on the host. Supports AddressSanitizer/UBSan.
 - **Test plugins** — built via configure type `T` or in simulator mode (test_codec, test_disk, test_fps, test_mem, etc. under `apps/plugins/`)
 - **CheckWPS** — validates WPS theme files (`tools/checkwps/`)
 - **Warble** — host-side codec testing tool (`lib/rbcodec/test/warble.make`), built via configure with warble app type

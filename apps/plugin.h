@@ -178,7 +178,7 @@ int plugin_open(const char *plugin, const char *parameter);
  * when this happens please take the opportunity to sort in
  * any new functions "waiting" at the end of the list.
  */
-#define PLUGIN_API_VERSION 280
+#define PLUGIN_API_VERSION 281
 
 /* 239 Marks the removal of ARCHOS HWCODEC and CHARCELL */
 
@@ -1034,6 +1034,11 @@ struct plugin_api {
        the API gets incompatible */
 #if defined(HAVE_ALBUMART) && defined(HAVE_LCD_COLOR)
     unsigned int (*dynamic_colors_resolve)(unsigned int original);
+#endif
+#ifdef HAVE_JPEG
+    int (*clip_jpeg_fd)(int fd, int flags, unsigned long jpeg_size,
+                        struct bitmap *bm, int maxsize, int format,
+                        const struct custom_format *cformat);
 #endif
 };
 

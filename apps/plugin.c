@@ -881,6 +881,9 @@ static const struct plugin_api rockbox_api = {
 #if defined(HAVE_ALBUMART) && defined(HAVE_LCD_COLOR)
     dynamic_colors_resolve,
 #endif
+#ifdef HAVE_JPEG
+    clip_jpeg_fd,
+#endif
 };
 
 static int plugin_buffer_handle;
