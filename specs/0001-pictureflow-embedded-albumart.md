@@ -1,6 +1,6 @@
 # 0001: PictureFlow reads embedded album art
 
-- **Status:** Agreed
+- **Status:** Implemented
 - **Branch/PR:** `claude/picture-flow-album-art-9hzu6g`
 
 ## Problem
@@ -82,3 +82,43 @@ plugin API, and PictureFlow's tagcache-RAM path
 | A1, A2, A3 | simulator: tagged media in `simdisk/`, init database, run PictureFlow with each `album_art` setting |
 | A5 | `./build-hw.sh` + `./build-hw.sh 5g` + `./build-sim.sh` |
 | R5 | code inspection: no new I/O in slide render path |
+
+## Verification results
+
+- **Unit tests:** `make -C tests` — `test_pf_aa_source` (15 checks, all
+  15 combinations of setting × have-file × have-embedded-jpg) and
+  `test_fixedpoint` (unrelated, pre-existing) both pass under
+  ASan+UBSan.
+- **Simulator (A1/A2/A3):** built `ipod6g` sim, generated MP3s with
+  embedded ID3v2 APIC JPEGs (ffmpeg + PIL) covering: embedded-only,
+  both cover-file-and-embedded, and no-art-at-all. Confirmed via a
+  temporary debug splash that `get_metadata()`/`pick_albumart_source()`
+  extract the exact correct embedded-picture `pos`/`size`/`type`
+  (cross-checked by hand against the raw ID3 bytes). Confirmed
+  end-to-end in PictureFlow: albums with embedded-only art show real
+  decoded covers (previously "?"), the no-art album still shows "?"
+  with no crash, and switching the `album_art` setting to "prefer
+  image file" correctly changes lookup order (verified the file-search
+  skip/no-skip behavior via `pf_aa_needs_file_search`). One dead end
+  worth recording: initial test JPEGs were flat solid colors and
+  decoded as flat gray — reproduced identically via the unrelated,
+  unmodified `imageviewer` plugin, isolating it as a pre-existing
+  decoder limitation with flat/solid-color JPEGs, not a bug in this
+  feature. Switching test fixtures to gradient images decoded
+  correctly and matched expectations.
+- **Hardware builds (A5):** NOT verified — this environment has no
+  `arm-elf-eabi` cross-compiler and cannot build one (no network
+  access for `tools/rockboxdev.sh` source fetches, and substituting a
+  generic `arm-none-eabi-gcc` showed compiler-macro mismatches
+  (`ARM_PROFILE`/`ARM_ARCH` undefined) indicating it isn't a safe
+  stand-in for Rockbox's patched toolchain). The plugin API change is
+  a 2-line, `#ifdef HAVE_JPEG`-gated addition following the exact
+  existing pattern of `read_jpeg_fd`/`read_jpeg_file` in the same
+  struct/table, and the rest of the diff is target-independent C. Run
+  `./build-hw.sh` and `./build-hw.sh 5g` to confirm before shipping.
+- **Unrelated fix required to build at all:** `apps/gui/list.c`
+  referenced a `callback_draw_margin` struct field that was never
+  declared (introduced by an unrelated earlier commit), which broke
+  compilation of every target including the simulator. Reverted that
+  one dead conditional to its prior working form (see commit) — this
+  is unrelated to album art and pre-dates this branch's work.

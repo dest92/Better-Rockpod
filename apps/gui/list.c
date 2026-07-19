@@ -128,8 +128,6 @@ void list_init_item_height(struct gui_synclist *list, enum screen_type screen)
     else
         line_height = line_height + global_settings.list_line_padding;
 #endif
-    if (list->callback_draw_margin && list->line_height[screen] > line_height)
-        return;
     list->line_height[screen] = line_height;
 }
 
