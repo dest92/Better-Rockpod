@@ -1,6 +1,6 @@
 # 0002: Host-side album art fetcher with web review UI
 
-- **Status:** Agreed
+- **Status:** Implemented
 - **Branch/PR:** `claude/ipod-rockbox-album-art-nx05vt`
 
 ## Problem
