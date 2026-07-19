@@ -51,7 +51,8 @@ pf_aa_needs_file_search(bool prefer_file_first, bool have_embedded_jpg)
     return prefer_file_first || !have_embedded_jpg;
 }
 
-/* Final source choice for one album.
+/* Final source choice for one album. Pass have_embedded_jpg = false to
+ * disable embedded art altogether (e.g. the "album art" setting is off).
  *
  * `have_file` may be false either because no cover file exists, or
  * because pf_aa_needs_file_search() said the search could be skipped.
@@ -59,12 +60,9 @@ pf_aa_needs_file_search(bool prefer_file_first, bool have_embedded_jpg)
  * depend on it (prefer-embedded with embedded art already available).
  */
 static inline enum aa_source
-pf_aa_select_source(bool enabled, bool prefer_file_first,
+pf_aa_select_source(bool prefer_file_first,
                      bool have_file, bool have_embedded_jpg)
 {
-    if (!enabled)
-        return AA_SOURCE_NONE;
-
     if (prefer_file_first)
     {
         if (have_file)

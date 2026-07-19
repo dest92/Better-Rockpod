@@ -118,6 +118,14 @@ int list_get_nb_lines(struct gui_synclist *list, enum screen_type screen)
     return lines;
 }
 
+/* A prior commit (be01c32) tried to preserve a custom line_height for
+ * lists with a "margin callback" (e.g. thumbnail lists) across a dirty
+ * reinit, so a theme change wouldn't reset a tall thumbnail row back to
+ * the font height. It referenced list->callback_draw_margin, a field
+ * that was never added to struct gui_synclist, so it never compiled.
+ * Restored to the prior unconditional behavior below; re-implementing
+ * the intended preservation needs the field actually declared and
+ * populated by whichever list wants it. */
 void list_init_item_height(struct gui_synclist *list, enum screen_type screen)
 {
     struct viewport *vp = list->parent[screen];

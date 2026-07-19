@@ -85,10 +85,10 @@ plugin API, and PictureFlow's tagcache-RAM path
 
 ## Verification results
 
-- **Unit tests:** `make -C tests` — `test_pf_aa_source` (15 checks, all
-  15 combinations of setting × have-file × have-embedded-jpg) and
+- **Unit tests:** `make -C tests` — `test_pf_aa_source` and
   `test_fixedpoint` (unrelated, pre-existing) both pass under
-  ASan+UBSan.
+  ASan+UBSan. (Check count changed from 15 to 12 after the post-review
+  fix removed the dead `enabled` parameter — see below.)
 - **Simulator (A1/A2/A3):** built `ipod6g` sim, generated MP3s with
   embedded ID3v2 APIC JPEGs (ffmpeg + PIL) covering: embedded-only,
   both cover-file-and-embedded, and no-art-at-all. Confirmed via a
@@ -121,4 +121,55 @@ plugin API, and PictureFlow's tagcache-RAM path
   declared (introduced by an unrelated earlier commit), which broke
   compilation of every target including the simulator. Reverted that
   one dead conditional to its prior working form (see commit) — this
-  is unrelated to album art and pre-dates this branch's work.
+  is unrelated to album art and pre-dates this branch's work. Left an
+  in-code comment naming the never-implemented feature it was for, so
+  a proper re-implementation (actually declaring the field) has
+  something to find.
+
+## Post-review fixes (code-review pass)
+
+A `/code-review` pass found four correctness regressions and one
+simplification opportunity, all fixed and re-verified in the simulator:
+
+- **CACHE_VERSION bump defeated by stale-cache reuse**: the per-album
+  "keep existing albumart" shortcut in `incremental_albumart_cache()`
+  is keyed on `pf_cfg.update_albumart`, independent of `cache_version`,
+  so a user upgrading with old `.pfraw` files already on disk (and
+  `update_albumart` persisted `true` from a prior "Update cache") would
+  have kept pre-embedded-art covers forever. Fixed by forcing
+  `update_albumart` off for the one rebuild triggered by a version
+  mismatch, then restoring the user's setting
+  (`apps/plugins/pictureflow/pictureflow.c`, `init()`). Verified by
+  hand-crafting that exact old-firmware state (stale `.pfraw`,
+  `cache_version=5`, `update_albumart=1`) and confirming the file gets
+  regenerated with the correct embedded cover, while the setting is
+  still `1` afterward.
+- **`AA_OFF` disabled all art, not just embedded**: `pick_albumart_source`
+  now only suppresses *embedded* art when the "album art" setting is
+  off; the file-cover search still runs unconditionally, matching
+  PictureFlow's behavior from before this feature existed. Verified:
+  under `album_art=off`, an album with both a cover file and embedded
+  art now shows the file cover (previously showed nothing).
+- **No fallback when the embedded picture fails to decode**: if
+  `clip_jpeg_fd` returns an error (corrupt/truncated embedded picture),
+  `incremental_albumart_cache()` now retries with
+  `search_albumart_files()` before giving up, so a coexisting cover
+  file still gets used instead of falling back to "?".
+- **`retrieve_id3()`'s RAM-tagcache fast path was dropped entirely**:
+  `get_albumart_for_index_from_db()` now tries the full
+  `get_metadata()` parse (needed to see embedded art) and falls back to
+  `retrieve_id3()` if that fails, restoring the old resilience for
+  file-based covers when the full parse can't succeed for some reason.
+- **Dead `enabled` parameter removed** from `pf_aa_select_source()` in
+  `aa_source.h` (its only real call site always passed `true`, since
+  `AA_OFF` is now handled by forcing `have_embedded_jpg` false instead)
+  — `tests/test_pf_aa_source.c` updated accordingly (12 checks).
+
+Not fixed, by choice: the double file-open for embedded art (one
+`get_metadata()` open + one explicit reopen for `clip_jpeg_fd`) and the
+duplication of embedded-vs-file selection logic against
+`playback.c`/`buffering.c` — both flagged as real but low-severity/low
+actionability (the former needs a `get_metadata()` API change to return
+a reusable fd; the latter is a structural consequence of plugins not
+being able to call core's static functions). Left as documented code
+comments instead of risking a larger, riskier refactor.

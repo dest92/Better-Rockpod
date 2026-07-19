@@ -2152,10 +2152,13 @@ bool retrieve_id3(struct mp3entry *id3, const char* file)
   "album art" setting; see aa_source.h for the pure selection logic
   and specs/0001-pictureflow-embedded-albumart.md for the rationale.
 
+  Embedded art is never considered when the setting is AA_OFF, but
+  (matching PictureFlow's pre-existing, setting-independent behavior)
+  a cover file is still searched for in that case.
+
   On success, buf holds the file to open (the cover file, or the
   track's own file when the source is embedded) and aa_cache.embedded
-  / aa_cache.aa are set accordingly. Assumes album art is enabled
-  (caller filters AA_OFF before this is reached).
+  / aa_cache.aa are set accordingly.
  */
 static bool pick_albumart_source(const struct mp3entry *entry,
                                  char *buf, int buflen)
@@ -2163,7 +2166,9 @@ static bool pick_albumart_source(const struct mp3entry *entry,
     bool prefer_file_first =
         rb->global_settings->album_art == AA_PREFER_IMAGE_FILE;
 #ifdef HAVE_JPEG
-    bool have_embedded_jpg = entry->has_embedded_albumart &&
+    bool have_embedded_jpg =
+        rb->global_settings->album_art != AA_OFF &&
+        entry->has_embedded_albumart &&
         (entry->albumart.type & AA_CLEAR_FLAGS_MASK) == AA_TYPE_JPG;
 #else
     bool have_embedded_jpg = false;
@@ -2173,8 +2178,7 @@ static bool pick_albumart_source(const struct mp3entry *entry,
     if (pf_aa_needs_file_search(prefer_file_first, have_embedded_jpg))
         have_file = search_albumart_files(entry, ":", buf, buflen);
 
-    switch (pf_aa_select_source(true, prefer_file_first,
-                                 have_file, have_embedded_jpg))
+    switch (pf_aa_select_source(prefer_file_first, have_file, have_embedded_jpg))
     {
         case AA_SOURCE_EMBEDDED:
             rb->strlcpy(buf, entry->path, buflen);
@@ -2201,11 +2205,6 @@ static bool get_albumart_for_index_from_db(const int slide_index, char *buf,
     char tcs_buf[TAGCACHE_BUFSZ];
     const long tcs_bufsz = sizeof(tcs_buf);
 
-    /* Skip the tagcache lookup and metadata parse entirely when the
-     * user disabled album art - both would be wasted work. */
-    if (rb->global_settings->album_art == AA_OFF)
-        return false;
-
     if (tcs.valid || !rb->tagcache_search(&tcs, tag_filename))
         return false;
 
@@ -2219,11 +2218,15 @@ static bool get_albumart_for_index_from_db(const int slide_index, char *buf,
     aa_cache.embedded = false;
 
     /* A full metadata parse (rather than the cheaper tagcache ramcache
-     * fill) is required here: only it reports embedded album art. This
-     * runs once per album, exactly when a cover still needs to be
-     * decoded into the pfraw cache (see incremental_albumart_cache()). */
+     * fill) is needed to see embedded album art, which tagcache doesn't
+     * store. This runs once per album, exactly when a cover still needs
+     * to be decoded into the pfraw cache (see incremental_albumart_cache()).
+     * If the full parse fails (e.g. the file is temporarily unavailable),
+     * fall back to the cheap RAM-tagcache fill so a file-based cover can
+     * still be found, same as before embedded art was supported. */
     ret = rb->tagcache_get_next(&tcs, tcs_buf, tcs_bufsz) &&
-          rb->get_metadata(&id3, -1, tcs.result) &&
+          (rb->get_metadata(&id3, -1, tcs.result) ||
+           retrieve_id3(&id3, tcs.result)) &&
           pick_albumart_source(&id3, buf, buflen);
 
     rb->tagcache_search_finish(&tcs);
@@ -2421,7 +2424,11 @@ static bool incremental_albumart_cache(bool verbose)
     if (aa_cache.embedded)
     {
         /* aa_cache.file is the track itself; seek to its embedded
-         * picture instead of decoding a separate cover file. */
+         * picture instead of decoding a separate cover file. This
+         * reopens a file get_albumart_for_index_from_db() already
+         * opened once via get_metadata() to detect the embedded art;
+         * avoiding that second open would need get_metadata() to hand
+         * back a reusable fd, which its API doesn't support today. */
         int fd = rb->open(aa_cache.file, O_RDONLY);
         if (fd < 0)
         {
@@ -2434,6 +2441,22 @@ static bool incremental_albumart_cache(bool verbose)
                                    &aa_cache.input_bmp, aa_cache.buf_sz,
                                    format, &format_transposed);
             rb->close(fd);
+        }
+
+        if (ret <= 0)
+        {
+            /* The embedded picture was unusable (e.g. corrupt or
+             * truncated) - fall back to a cover file, if any, instead
+             * of giving up outright. id3 still holds this album's
+             * representative track, set by get_albumart_for_index_from_db(). */
+            char cover_file[MAX_PATH];
+            if (search_albumart_files(&id3, ":", cover_file, sizeof(cover_file)))
+            {
+                rb->strlcpy(aa_cache.file, cover_file, sizeof(aa_cache.file));
+                aa_cache.embedded = false;
+                ret = read_image_file(aa_cache.file, &aa_cache.input_bmp,
+                                      aa_cache.buf_sz, format, &format_transposed);
+            }
         }
     }
     else
@@ -4984,10 +5007,24 @@ static bool init(void)
         return false;
     }
 
-    if ((pf_cfg.cache_version != CACHE_VERSION) && !create_albumart_cache())
+    if (pf_cfg.cache_version != CACHE_VERSION)
     {
-        config_save(CACHE_REBUILD, false);
-        error_wait("Could not create album art cache");
+        /* A cache version bump means the *meaning* of a cached .pfraw
+         * changed (e.g. this version adds embedded-art decoding), so
+         * the "keep existing albumart" shortcut in
+         * incremental_albumart_cache() must not reuse pre-bump files
+         * during this one rebuild - otherwise the whole point of the
+         * bump is silently defeated for users who have it enabled. */
+        bool saved_update_albumart = pf_cfg.update_albumart;
+        pf_cfg.update_albumart = false;
+        bool cache_ok = create_albumart_cache();
+        pf_cfg.update_albumart = saved_update_albumart;
+
+        if (!cache_ok)
+        {
+            config_save(CACHE_REBUILD, false);
+            error_wait("Could not create album art cache");
+        }
     }
 
     if (pf_cfg.cache_version != CACHE_VERSION)

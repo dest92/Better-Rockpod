@@ -6,30 +6,25 @@
 #include "rbtest.h"
 #include "aa_source.h"
 
-TEST(select_source_disabled_always_none)
-{
-    /* AA_OFF: no source regardless of what's available */
-    CHECK_EQ(pf_aa_select_source(false, false, false, false), AA_SOURCE_NONE);
-    CHECK_EQ(pf_aa_select_source(false, false, true, true), AA_SOURCE_NONE);
-    CHECK_EQ(pf_aa_select_source(false, true, true, true), AA_SOURCE_NONE);
-}
-
 TEST(select_source_prefer_embedded)
 {
-    /* prefer_file_first = false: embedded wins whenever present */
-    CHECK_EQ(pf_aa_select_source(true, false, false, false), AA_SOURCE_NONE);
-    CHECK_EQ(pf_aa_select_source(true, false, true, false), AA_SOURCE_FILE);
-    CHECK_EQ(pf_aa_select_source(true, false, false, true), AA_SOURCE_EMBEDDED);
-    CHECK_EQ(pf_aa_select_source(true, false, true, true), AA_SOURCE_EMBEDDED);
+    /* prefer_file_first = false: embedded wins whenever present.
+     * have_embedded_jpg = false also covers the "album art" setting
+     * being off, which the caller models by never reporting embedded
+     * art as available. */
+    CHECK_EQ(pf_aa_select_source(false, false, false), AA_SOURCE_NONE);
+    CHECK_EQ(pf_aa_select_source(false, true, false), AA_SOURCE_FILE);
+    CHECK_EQ(pf_aa_select_source(false, false, true), AA_SOURCE_EMBEDDED);
+    CHECK_EQ(pf_aa_select_source(false, true, true), AA_SOURCE_EMBEDDED);
 }
 
 TEST(select_source_prefer_image_file)
 {
     /* prefer_file_first = true: file wins whenever present */
-    CHECK_EQ(pf_aa_select_source(true, true, false, false), AA_SOURCE_NONE);
-    CHECK_EQ(pf_aa_select_source(true, true, true, false), AA_SOURCE_FILE);
-    CHECK_EQ(pf_aa_select_source(true, true, false, true), AA_SOURCE_EMBEDDED);
-    CHECK_EQ(pf_aa_select_source(true, true, true, true), AA_SOURCE_FILE);
+    CHECK_EQ(pf_aa_select_source(true, false, false), AA_SOURCE_NONE);
+    CHECK_EQ(pf_aa_select_source(true, true, false), AA_SOURCE_FILE);
+    CHECK_EQ(pf_aa_select_source(true, false, true), AA_SOURCE_EMBEDDED);
+    CHECK_EQ(pf_aa_select_source(true, true, true), AA_SOURCE_FILE);
 }
 
 TEST(needs_file_search_prefer_image_file_always_searches)
@@ -50,7 +45,6 @@ TEST(needs_file_search_prefer_embedded_skips_when_embedded_available)
 
 int main(void)
 {
-    RUN_TEST(select_source_disabled_always_none);
     RUN_TEST(select_source_prefer_embedded);
     RUN_TEST(select_source_prefer_image_file);
     RUN_TEST(needs_file_search_prefer_image_file_always_searches);
