@@ -1,7 +1,7 @@
 # 0002: Automatic album art fetcher (PC-side tool)
 
-- **Status:** Draft
-- **Branch/PR:**
+- **Status:** Implemented
+- **Branch/PR:** `claude/picture-flow-album-art-9hzu6g`
 
 ## Problem
 
@@ -104,6 +104,31 @@ already used ad-hoc during spec 0001's verification) and `requests`.
 
 | Criterion | How verified |
 |-----------|--------------|
-| A1, A3, A5 | unit tests for `album_has_art()` against fixture directories (temp dirs with real small media files, no network) |
-| A4 | unit test for `build_itunes_query()`, plus a manual run against a made-up artist/album to confirm graceful "not found" handling |
-| A2 | manual end-to-end run against a small real test library (reusing fixtures from spec 0001 verification), confirming the embedded tag round-trips via mutagen |
+| A1, A3, A5 | unit tests for `album_needs_art()`/`folder_has_cover_file()`/`group_tracks_into_albums()` (22 tests, `python3 -m unittest test_fetch_coverart`) |
+| A4 | unit test for `pick_itunes_artwork()` with an empty-results response, plus a manual dry-run with the iTunes call mocked to return 0 results for one album and a match for another - confirmed the scan continued and both were reported correctly |
+| A2 | manual end-to-end run with `fetch_itunes_json`/`download_image` mocked (real network blocked by this sandbox's egress policy - see below), embedding real image bytes into all 3 tracks of a real multi-track MP3 album via the actual `--apply` CLI path, verified via `has_embedded_art()` afterward |
+
+## Verification results
+
+- **Unit tests:** all 22 pass (`python3 -m unittest tools/coverart/test_fetch_coverart -v`).
+- **Real-file, no-mock verification:** built a real test library (ffmpeg-generated
+  MP3/M4A/FLAC/Ogg files, one plain, one with real embedded art, one with
+  a folder `cover.jpg`) and ran the actual `scan_library`/`album_needs_art`/
+  `folder_has_cover_file` pipeline against it - correctly identified the one
+  album needing art and skipped the other two; re-running after a manual
+  embed correctly skipped it too (idempotency, A5). `embed_artwork` verified
+  directly against real files for all four formats (MP3/M4A/FLAC/Ogg) -
+  the embedded bytes round-trip exactly and `has_embedded_art()` flips
+  false→true.
+- **Network path:** this sandbox's outbound proxy blocks `itunes.apple.com`
+  by organization egress policy (confirmed via the proxy status endpoint,
+  not a bug in the tool) - the real HTTP call to the iTunes Search API
+  could not be exercised live here. Verified the full `--apply` pipeline
+  instead with `fetch_itunes_json`/`download_image` monkey-patched to
+  return iTunes-shaped canned data, confirming: the 100x100→600x600 URL
+  upsizing is actually used end-to-end, every track in a 3-track album
+  gets the artwork embedded, and a 0-result album is reported as
+  "not found" without stopping the scan (A4). **The user should do one
+  live run against a real album on their own machine** to confirm the
+  actual iTunes HTTP call and JSON shape haven't drifted from what's
+  assumed here.
