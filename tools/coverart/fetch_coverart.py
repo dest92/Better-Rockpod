@@ -149,13 +149,20 @@ def has_embedded_art(path):
     return False
 
 
-def scan_library(root):
-    """Walk `root` for audio files and group them into albums."""
+def scan_library(root, on_progress=None):
+    """Walk `root` for audio files and group them into albums.
+
+    `on_progress(count)` is called after each track is read, so callers
+    can show scan progress on a potentially slow (USB/network-mounted)
+    library without waiting for the whole walk to finish.
+    """
     track_infos = []
     for dirpath, _dirnames, filenames in os.walk(root):
         for name in filenames:
             if os.path.splitext(name)[1].lower() in AUDIO_EXTENSIONS:
                 track_infos.append(read_track_tags(os.path.join(dirpath, name)))
+                if on_progress:
+                    on_progress(len(track_infos))
     return group_tracks_into_albums(track_infos)
 
 
@@ -267,8 +274,12 @@ def main(argv=None):
                         help="download and embed artwork (default: dry-run report only)")
     args = parser.parse_args(argv)
 
-    albums = scan_library(args.library)
-    print(f"Scanned {len(albums)} album(s) under {args.library}")
+    def report_progress(count):
+        if count % 50 == 0:
+            print(f"\r  scanning... {count} file(s) read", end="", flush=True)
+
+    albums = scan_library(args.library, on_progress=report_progress)
+    print(f"\rScanned {len(albums)} album(s) under {args.library}" + " " * 20)
     print(f"Mode: {'APPLY (writing tags)' if args.apply else 'dry-run (no changes)'}")
     print()
 

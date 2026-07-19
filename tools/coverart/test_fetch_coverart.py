@@ -18,6 +18,7 @@ from fetch_coverart import (
     folder_has_cover_file,
     group_tracks_into_albums,
     pick_itunes_artwork,
+    scan_library,
     upsize_itunes_artwork_url,
 )
 
@@ -155,6 +156,25 @@ class PickItunesArtworkTest(unittest.TestCase):
     def test_missing_artwork_field_returns_none(self):
         response = {"resultCount": 1, "results": [{"collectionName": "No Art"}]}
         self.assertIsNone(pick_itunes_artwork(response))
+
+
+class ScanLibraryProgressTest(unittest.TestCase):
+    def test_on_progress_called_once_per_track_found(self):
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, "01.mp3"), "wb").close()
+            open(os.path.join(d, "02.mp3"), "wb").close()
+            open(os.path.join(d, "notes.txt"), "w").close()
+
+            counts = []
+            scan_library(d, on_progress=counts.append)
+
+            self.assertEqual(counts, [1, 2])
+
+    def test_scan_without_progress_callback_still_works(self):
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, "01.mp3"), "wb").close()
+            albums = scan_library(d)
+            self.assertEqual(len(albums), 1)
 
 
 if __name__ == "__main__":
