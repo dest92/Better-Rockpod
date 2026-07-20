@@ -50,7 +50,7 @@ Track transitions occasionally produce silence on the iPod Classic 6G.
 Needs a reliable reproduction first; may share a root cause with 1.1
 (wake timing vs. rebuffer).
 
-### 1.3 Dynamic colors: fix remaining glitches and harden — P1, effort M
+### 1.3 Dynamic colors: fix remaining glitches and harden — P1, effort M ✅ *(partially done)*
 
 - **Source:** fork idea (user-observed glitches)
 - **Area:** `apps/gui/skin_engine/skin_albumart_color.c` and its hooks in
@@ -117,7 +117,7 @@ audio work should help).
 
 ## 2. Features (fork ideas)
 
-### 2.1 Disk-locality-aware shuffle for HDD — P1, effort M *(flagship)*
+### 2.1 Disk-locality-aware shuffle for HDD — P1, effort M *(flagship)* ✅ **DONE**
 
 - **Source:** fork idea
 - **Area:** `apps/playlist.c`, `firmware/export/fat.h`, settings
@@ -140,7 +140,7 @@ Exposed as a setting (e.g. Shuffle: Normal / Disk-optimized). Trade-off to
 document in the spec: fewer seeks and spin-ups vs. a slightly less
 random-feeling order (tracks ripped together tend to sit together on disk).
 
-### 2.2 Shuffle anti-repeat memory — P1, effort S
+### 2.2 Shuffle anti-repeat memory — P1, effort S ✅ **DONE**
 
 - **Source:** fork idea
 - **Area:** `apps/playlist.c` (`randomise_playlist_unlocked`)
@@ -271,7 +271,7 @@ playback-engine fixes. A wholesale rebase is not realistic given the size of
 Rockpod's divergence (USB audio stack, PictureFlow rewrite, power
 management) — targeted cherry-picks are the sustainable strategy.
 
-### 4.3 CI builds via GitHub Actions — P1, effort S–M
+### 4.3 CI builds via GitHub Actions — P1, effort S–M ✅ **DONE**
 
 - **Source:** [rockpod#19](https://github.com/nuxcodes/rockpod/issues/19)
 - **Area:** `.github/workflows/`
