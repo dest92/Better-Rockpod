@@ -98,8 +98,10 @@
     && (CONFIG_STORAGE & STORAGE_ATA)
 #define HAVE_DISK_SHUFFLE
 #include "ata.h"
-#include "shuffle_locality.h"
 #endif
+/* pure shuffle helpers: locality ordering (spec 0004) and repeat
+ * anti-repeat (spec 0005); used on all builds */
+#include "shuffle_locality.h"
 #include "misc.h"
 #include "pathfuncs.h"
 #include "button.h"
@@ -3067,11 +3069,50 @@ int playlist_next(int steps)
         /* end of playlist... or is it */
         if (repeat_mode == REPEAT_SHUFFLE && playlist->amount > 1)
         {
-            /* Repeat shuffle mode.  Re-shuffle playlist and resume play */
+            /* Repeat shuffle mode.  Re-shuffle playlist and resume play.
+             * Retry seeds so the tracks just played at the end of the
+             * previous pass don't come right back at the start of the
+             * new one; only the winning seed is written, so resume
+             * replays the identical order (spec 0005). */
+            int amount = playlist->amount;
+            int recent_count = MIN(amount / 4, SHUFFLE_ANTIREPEAT_MAX);
+            unsigned long recent[SHUFFLE_ANTIREPEAT_MAX];
+            unsigned int seed = current_tick;
+            unsigned int best_seed = seed;
+            bool disk = disk_shuffle_requested(playlist);
+
+            if (amount < 3 * recent_count)
+                recent_count = 0;   /* too small to avoid repeats */
+            for (int r = 0; r < recent_count; r++)
+                recent[r] = playlist->indices[
+                    (playlist->first_index - 1 - r + 2 * amount) % amount];
+
             playlist->first_index = 0;
+
+            if (recent_count > 0)
+            {
+                int best_overlap = recent_count + 1;
+                for (int attempt = 0; attempt < 8; attempt++)
+                {
+                    sort_playlist_unlocked(playlist, false, false);
+                    randomise_playlist_unlocked(playlist, seed + attempt,
+                                                false, false, disk);
+                    int overlap = shuffle_repeat_overlap(playlist->indices,
+                                            amount, recent, recent_count);
+                    if (overlap < best_overlap)
+                    {
+                        best_overlap = overlap;
+                        best_seed = seed + attempt;
+                    }
+                    if (best_overlap == 0)
+                        break;
+                }
+            }
+
+            /* final shuffle with the winning seed is the recorded one */
             sort_playlist_unlocked(playlist, false, false);
-            randomise_playlist_unlocked(playlist, current_tick, false, true,
-                                        disk_shuffle_requested(playlist));
+            randomise_playlist_unlocked(playlist, best_seed, false, true,
+                                        disk);
             global_settings.playlist_shuffle = true;
 
             playlist->started = true;

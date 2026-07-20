@@ -185,11 +185,64 @@ TEST(unknown_keys)
     CHECK(longrange);
 }
 
+/* specs/0005-repeat-shuffle-antirepeat.md A1: overlap counting */
+TEST(repeat_overlap_counts)
+{
+    unsigned long ind[10] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    unsigned long rec_disjoint[3] = { 100, 101, 102 };
+    unsigned long rec_same[3] = { 0, 1, 2 };
+    unsigned long rec_partial[3] = { 2, 50, 9 };  /* 9 outside window */
+
+    CHECK_EQ(shuffle_repeat_overlap(ind, 10, rec_disjoint, 3), 0);
+    CHECK_EQ(shuffle_repeat_overlap(ind, 10, rec_same, 3), 3);
+    CHECK_EQ(shuffle_repeat_overlap(ind, 10, rec_partial, 3), 1);
+    CHECK_EQ(shuffle_repeat_overlap(ind, 10, rec_same, 0), 0);
+    /* window clamped to n */
+    CHECK_EQ(shuffle_repeat_overlap(ind, 2, rec_same, 3), 2);
+}
+
+/* A2: seed retry finds a zero-overlap order quickly (deterministic) */
+TEST(repeat_retry_converges)
+{
+    enum { N = 100, K = 10 };
+    static unsigned long ind[N];
+    unsigned long recent[K];
+
+    /* previous pass: 0..N-1 in order; recent = last K played */
+    for (int i = 0; i < K; i++)
+        recent[i] = N - 1 - i;
+
+    int best = K + 1;
+    unsigned int seed = 12345;
+    int tries;
+    for (tries = 0; tries < 8; tries++)
+    {
+        /* re-sort + plain Fisher-Yates, as playlist.c does per attempt */
+        for (int i = 0; i < N; i++)
+            ind[i] = i;
+        srand(seed + tries);
+        for (int i = N - 1; i > 0; i--)
+        {
+            int j = rand() % (i + 1);
+            unsigned long t = ind[j]; ind[j] = ind[i]; ind[i] = t;
+        }
+        int ov = shuffle_repeat_overlap(ind, N, recent, K);
+        if (ov < best)
+            best = ov;
+        if (best == 0)
+            break;
+    }
+    CHECK_EQ(best, 0);
+    CHECK(tries < 8);
+}
+
 int main(void)
 {
     RUN_TEST(valid_permutation);
     RUN_TEST(deterministic);
     RUN_TEST(locality_vs_plain);
     RUN_TEST(unknown_keys);
+    RUN_TEST(repeat_overlap_counts);
+    RUN_TEST(repeat_retry_converges);
     return rbtest_report();
 }

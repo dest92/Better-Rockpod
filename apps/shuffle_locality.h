@@ -125,4 +125,27 @@ static inline void shuffle_locality_order(struct shuffle_loc_ent *ents,
     shuffle_loc_fy(ents + known, n - known);
 }
 
+/* Max tracks considered "recently played" by the repeat anti-repeat */
+#define SHUFFLE_ANTIREPEAT_MAX 10
+
+/* Repeat Shuffle anti-repeat helper
+ * (specs/0005-repeat-shuffle-antirepeat.md): count how many of the
+ * first k entries of indices[] appear in recent[0..k).  Playlist index
+ * values are unique, so raw equality identifies a track. */
+static inline int shuffle_repeat_overlap(const unsigned long *indices, int n,
+                                         const unsigned long *recent, int k)
+{
+    int window = k < n ? k : n;
+    int overlap = 0;
+
+    for (int i = 0; i < window; i++)
+        for (int j = 0; j < k; j++)
+            if (indices[i] == recent[j])
+            {
+                overlap++;
+                break;
+            }
+    return overlap;
+}
+
 #endif /* SHUFFLE_LOCALITY_H */
