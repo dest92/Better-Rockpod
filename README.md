@@ -226,6 +226,38 @@ The repo includes third-party themes under `themes/`:
 
 ---
 
+## Tools
+
+### Album Art Fetcher
+
+PictureFlow's cache builder now reads embedded cover art (ID3 APIC, MP4
+`covr`, FLAC/Vorbis `METADATA_BLOCK_PICTURE`) directly from the audio
+files — no separate `cover.jpg` required. `tools/coverart/` is a
+companion PC-side script for the tracks that still have no art at all
+(neither embedded nor a folder cover file): it scans a music library,
+looks up missing albums on the iTunes Search API, and embeds the
+matched artwork into every track of the album.
+
+```bash
+pip install -r tools/coverart/requirements.txt
+
+# Dry run (default) — reports what would change, touches nothing
+python3 tools/coverart/fetch_coverart.py /path/to/music
+
+# Apply — downloads and embeds the matched artwork
+python3 tools/coverart/fetch_coverart.py /path/to/music --apply
+```
+
+Point `/path/to/music` at the iPod's music folder while it's connected
+in disk mode (e.g. `/mnt/g/Music` on WSL, `E:\Music` on Windows,
+`/Volumes/iPod/Music` on macOS). The scan prints a running progress
+count for large libraries, then a per-album report (found / embedded /
+not found / error / skipped) and a final summary. Albums that already
+have art (embedded or a `cover`/`folder`/`album` image file) are left
+untouched. Supports MP3, M4A/AAC, FLAC, and Ogg Vorbis.
+
+---
+
 ## Supported Models
 
 | Feature                   | iPod Classic (6G/7G)  | iPod Video (5G/5.5G) |
