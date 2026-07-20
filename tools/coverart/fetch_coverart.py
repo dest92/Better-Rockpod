@@ -14,7 +14,7 @@ Usage:
 Requires: mutagen, requests (pip install mutagen requests)
 """
 import argparse
-import io
+import base64
 import os
 import re
 import sys
@@ -24,7 +24,6 @@ from collections import namedtuple
 
 import requests
 from mutagen import File as mutagen_file
-from mutagen.easyid3 import EasyID3
 from mutagen.flac import FLAC, Picture
 from mutagen.id3 import APIC, ID3, ID3NoHeaderError
 from mutagen.mp4 import MP4, MP4Cover
@@ -212,7 +211,6 @@ def embed_artwork(track_path, image_bytes, mime="image/jpeg"):
         pic.data = image_bytes
         pic.type = 3
         pic.mime = mime
-        import base64
         audio["metadata_block_picture"] = [
             base64.b64encode(pic.write()).decode("ascii")
         ]
