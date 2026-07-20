@@ -21,12 +21,14 @@ SAN := -fsanitize=address,undefined -fno-sanitize=shift \
        -fno-sanitize-recover=all -fno-omit-frame-pointer
 CFLAGS := -std=gnu99 -W -Wall -Wextra -g -O1 $(SAN) -I.
 
-TESTS := fixedpoint pf_aa_source
+TESTS := fixedpoint pf_aa_source aa_color_math
 
 test_fixedpoint_SRCS := $(ROOT)/lib/fixedpoint/fixedpoint.c
 test_fixedpoint_CFLAGS := -I$(ROOT)/lib/fixedpoint
 
 test_pf_aa_source_CFLAGS := -I$(ROOT)/apps/plugins/pictureflow
+
+test_aa_color_math_CFLAGS := -I$(ROOT)/apps/gui/skin_engine
 
 .PHONY: all build run clean
 
