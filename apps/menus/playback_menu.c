@@ -61,6 +61,7 @@ static int setcrossfadeonexit_callback(int action,
 /***********************************/
 /*    PLAYBACK MENU                */
 MENUITEM_SETTING(shuffle_item, &global_settings.playlist_shuffle, NULL);
+MENUITEM_SETTING(disk_shuffle_item, &global_settings.disk_shuffle, NULL);
 MENUITEM_SETTING(repeat_mode, &global_settings.repeat_mode, NULL);
 MENUITEM_SETTING(play_selected, &global_settings.play_selected, NULL);
 
@@ -184,7 +185,7 @@ MENUITEM_SETTING(playback_log, &global_settings.playback_log, NULL);
 
 MAKE_MENU(playback_settings,ID2P(LANG_PLAYBACK),0,
           Icon_Playback_menu,
-          &shuffle_item, &repeat_mode, &play_selected,
+          &shuffle_item, &disk_shuffle_item, &repeat_mode, &play_selected,
           &ff_rewind_settings_menu,
 #ifdef HAVE_DISK_STORAGE
           &buffer_margin,

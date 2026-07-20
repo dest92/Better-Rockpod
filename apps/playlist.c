@@ -89,6 +89,17 @@
 #include "applimits.h"
 #include "screens.h"
 #include "core_alloc.h"
+
+/* Disk-locality-aware shuffle (specs/0004-disk-locality-shuffle.md):
+ * needs dircache filerefs for the cluster keys and ATA storage for the
+ * HDD/SSD distinction; hosted/simulator builds fall back to plain
+ * shuffle. */
+#if defined(HAVE_DIRCACHE) && !defined(SIMULATOR) \
+    && (CONFIG_STORAGE & STORAGE_ATA)
+#define HAVE_DISK_SHUFFLE
+#include "ata.h"
+#include "shuffle_locality.h"
+#endif
 #include "misc.h"
 #include "pathfuncs.h"
 #include "button.h"
@@ -429,6 +440,9 @@ static int update_control_unlocked(struct playlist_info* playlist,
         break;
     case PLAYLIST_COMMAND_SHUFFLE:
         result = fdprintf(fd, "S:%d:%d\n", i1, i2);
+        break;
+    case PLAYLIST_COMMAND_DISK_SHUFFLE:
+        result = fdprintf(fd, "H:%d:%d\n", i1, i2);
         break;
     case PLAYLIST_COMMAND_UNSHUFFLE:
         result = fdprintf(fd, "U:%d\n", i1);
@@ -1511,16 +1525,113 @@ static void find_and_set_playlist_index_unlocked(struct playlist_info* playlist,
     }
 }
 
+#ifdef HAVE_DISK_SHUFFLE
+/* Whether a shuffle should try the disk-locality order: setting on,
+ * filerefs available and a spinning disk active */
+static bool disk_shuffle_requested(const struct playlist_info* playlist)
+{
+    return global_settings.disk_shuffle
+        && playlist->dcfrefs_handle
+        && !ata_get_ssd_mode();
+}
+
+/*
+ * Reorder indices[] and dcfrefs[] so consecutive tracks tend to be
+ * physically near each other on disk (specs/0004-disk-locality-shuffle.md).
+ * Caller has seeded the RNG.  Returns false (playlist untouched) when
+ * keys or memory are unavailable, letting the caller fall back to the
+ * plain shuffle.
+ */
+static bool randomise_playlist_disk_unlocked(struct playlist_info* playlist)
+{
+    int n = playlist->amount;
+    if (n <= 1 || !playlist->dcfrefs_handle)
+        return false;
+
+    /* keys must resolve consistently for resume to reproduce the order:
+     * wait out any in-progress dircache scan (fast once built) */
+    dircache_wait();
+
+    size_t size = n * (2 * sizeof(struct shuffle_loc_ent))
+                + SHUFFLE_REGION_SLOTS(n) * sizeof(int);
+    int handle = core_alloc(size);
+    if (handle <= 0)
+        return false;
+
+    struct shuffle_loc_ent *ents = core_get_data(handle);
+    struct shuffle_loc_ent *aux = ents + n;
+    int *region_perm = (int *)(aux + n);
+    struct dircache_fileref *dcfrefs =
+        core_get_data(playlist->dcfrefs_handle);
+
+    int missing = 0;
+    for (int i = 0; i < n; i++)
+    {
+        long cluster = dircache_get_fileref_firstcluster(&dcfrefs[i]);
+        ents[i].key = cluster >= 0 ? cluster : SHUFFLE_KEY_UNKNOWN;
+        ents[i].idx = i;
+        if (cluster < 0)
+            missing++;
+    }
+
+    /* too little disk info to be useful */
+    if (missing * 4 > n)
+    {
+        core_free(handle);
+        return false;
+    }
+
+    shuffle_locality_order(ents, aux, region_perm, n);
+
+    /* apply the permutation in place (cycle walking): position i takes
+     * the track that was at position ents[i].idx */
+    for (int i = 0; i < n; i++)
+    {
+        if (ents[i].idx < 0)
+            continue;
+        int cur = i;
+        unsigned long saved_index = playlist->indices[i];
+        struct dircache_fileref saved_ref = dcfrefs[i];
+        while (1)
+        {
+            int src = ents[cur].idx;
+            ents[cur].idx = -1;
+            if (src == i)
+            {
+                playlist->indices[cur] = saved_index;
+                dcfrefs[cur] = saved_ref;
+                break;
+            }
+            playlist->indices[cur] = playlist->indices[src];
+            dcfrefs[cur] = dcfrefs[src];
+            cur = src;
+        }
+    }
+
+    core_free(handle);
+    return true;
+}
+#else /* !HAVE_DISK_SHUFFLE */
+static inline bool disk_shuffle_requested(const struct playlist_info* playlist)
+{
+    (void)playlist;
+    return false;
+}
+#endif /* HAVE_DISK_SHUFFLE */
+
 /*
  * randomly rearrange the array of indices for the playlist.  If start_current
- * is true then update the index to the new index of the current playing track
+ * is true then update the index to the new index of the current playing track.
+ * If disk is true, try the disk-locality order first (falls back to the
+ * plain shuffle when unavailable).
  */
 static int randomise_playlist_unlocked(struct playlist_info* playlist,
                                        unsigned int seed, bool start_current,
-                                       bool write)
+                                       bool write, bool disk)
 {
     int count;
     int candidate;
+    bool disk_done = false;
     unsigned long current = playlist->indices[playlist->index];
 
     /* seed 0 is used to identify sorted playlist for resume purposes */
@@ -1530,25 +1641,35 @@ static int randomise_playlist_unlocked(struct playlist_info* playlist,
     /* seed with the given seed */
     srand(seed);
 
-    /* randomise entire indices list */
-    for(count = playlist->amount - 1; count >= 0; count--)
-    {
-        /* the rand is from 0 to RAND_MAX, so adjust to our value range */
-        candidate = rand() % (count + 1);
-
-        /* now swap the values at the 'count' and 'candidate' positions */
-        unsigned long indextmp = playlist->indices[candidate];
-        playlist->indices[candidate] = playlist->indices[count];
-        playlist->indices[count] = indextmp;
-#ifdef HAVE_DIRCACHE
-        if (playlist->dcfrefs_handle)
-        {
-            struct dircache_fileref *dcfrefs = core_get_data(playlist->dcfrefs_handle);
-            struct dircache_fileref dcftmp = dcfrefs[candidate];
-            dcfrefs[candidate] = dcfrefs[count];
-            dcfrefs[count] = dcftmp;
-        }
+#ifdef HAVE_DISK_SHUFFLE
+    if (disk)
+        disk_done = randomise_playlist_disk_unlocked(playlist);
+#else
+    (void)disk;
 #endif
+
+    if (!disk_done)
+    {
+        /* randomise entire indices list */
+        for(count = playlist->amount - 1; count >= 0; count--)
+        {
+            /* the rand is from 0 to RAND_MAX, so adjust to our value range */
+            candidate = rand() % (count + 1);
+
+            /* now swap the values at the 'count' and 'candidate' positions */
+            unsigned long indextmp = playlist->indices[candidate];
+            playlist->indices[candidate] = playlist->indices[count];
+            playlist->indices[count] = indextmp;
+#ifdef HAVE_DIRCACHE
+            if (playlist->dcfrefs_handle)
+            {
+                struct dircache_fileref *dcfrefs = core_get_data(playlist->dcfrefs_handle);
+                struct dircache_fileref dcftmp = dcfrefs[candidate];
+                dcfrefs[candidate] = dcfrefs[count];
+                dcfrefs[count] = dcftmp;
+            }
+#endif
+        }
     }
 
     if (start_current)
@@ -1561,8 +1682,10 @@ static int randomise_playlist_unlocked(struct playlist_info* playlist,
 
     if (write)
     {
-        update_control_unlocked(playlist, PLAYLIST_COMMAND_SHUFFLE, seed,
-            playlist->first_index, NULL, NULL, NULL);
+        update_control_unlocked(playlist,
+            disk_done ? PLAYLIST_COMMAND_DISK_SHUFFLE
+                      : PLAYLIST_COMMAND_SHUFFLE,
+            seed, playlist->first_index, NULL, NULL, NULL);
     }
 
     return 0;
@@ -2947,7 +3070,8 @@ int playlist_next(int steps)
             /* Repeat shuffle mode.  Re-shuffle playlist and resume play */
             playlist->first_index = 0;
             sort_playlist_unlocked(playlist, false, false);
-            randomise_playlist_unlocked(playlist, current_tick, false, true);
+            randomise_playlist_unlocked(playlist, current_tick, false, true,
+                                        disk_shuffle_requested(playlist));
             global_settings.playlist_shuffle = true;
 
             playlist->started = true;
@@ -3070,7 +3194,8 @@ int playlist_randomise(struct playlist_info* playlist, unsigned int seed,
 
     check_control(playlist);
 
-    result = randomise_playlist_unlocked(playlist, seed, start_current, true);
+    result = randomise_playlist_unlocked(playlist, seed, start_current, true,
+                                         disk_shuffle_requested(playlist));
     if (result != -1 && (audio_status() & AUDIO_STATUS_PLAY) &&
         playlist->started)
     {
@@ -3130,6 +3255,8 @@ static enum playlist_command pl_cmds_run(char cmd)
             return PLAYLIST_COMMAND_DELETE;
         case 'S':
             return PLAYLIST_COMMAND_SHUFFLE;
+        case 'H':
+            return PLAYLIST_COMMAND_DISK_SHUFFLE;
         case 'U':
             return PLAYLIST_COMMAND_UNSHUFFLE;
         case 'R':
@@ -3377,6 +3504,7 @@ int playlist_resume(void)
                         break;
                     }
                     case PLAYLIST_COMMAND_SHUFFLE:
+                    case PLAYLIST_COMMAND_DISK_SHUFFLE:
                     {
                         /* strp[0]=seed strp[1]=first_index */
                         int seed;
@@ -3398,7 +3526,8 @@ int playlist_resume(void)
                         playlist->first_index = atoi(strp[1]);
 
                         if (randomise_playlist_unlocked(playlist, seed, false,
-                                false) < 0)
+                                false, current_command ==
+                                       PLAYLIST_COMMAND_DISK_SHUFFLE) < 0)
                         {
                             result = -9;
                             goto out;
@@ -3670,7 +3799,8 @@ int playlist_shuffle(int random_seed, int start_index)
         start_current = true;
     }
 
-    randomise_playlist_unlocked(playlist, random_seed, start_current, true);
+    randomise_playlist_unlocked(playlist, random_seed, start_current, true,
+                                disk_shuffle_requested(playlist));
 
     playlist_write_unlock(playlist);
     dc_thread_start(playlist, true);

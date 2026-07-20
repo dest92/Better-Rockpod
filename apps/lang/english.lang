@@ -17139,3 +17139,17 @@
     lcd_color: "Dynamic Colors"
   </voice>
 </phrase>
+<phrase>
+  id: LANG_DISK_SHUFFLE
+  desc: in playback settings
+  user: core
+  <source>
+    *: "Disk-optimized Shuffle"
+  </source>
+  <dest>
+    *: "Disk-optimized Shuffle"
+  </dest>
+  <voice>
+    *: "Disk-optimized Shuffle"
+  </voice>
+</phrase>
