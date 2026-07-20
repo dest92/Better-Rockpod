@@ -50,7 +50,33 @@ Track transitions occasionally produce silence on the iPod Classic 6G.
 Needs a reliable reproduction first; may share a root cause with 1.1
 (wake timing vs. rebuffer).
 
-### 1.3 Build error from main — P1, effort S
+### 1.3 Dynamic colors: fix remaining glitches and harden — P1, effort M
+
+- **Source:** fork idea (user-observed glitches)
+- **Area:** `apps/gui/skin_engine/skin_albumart_color.c` and its hooks in
+  `skin_display.c`, `skin_render.c`, `statusbar-skinned.c`,
+  `apps/gui/list.c` / `bitmap/list-skinned.c`
+
+The dynamic album-art colors feature still glitches occasionally. The git
+history shows this area has needed repeated point fixes (WPS→menu flicker
+in v5.3-hf1, background gaps in v5.3-beta.1, quantization fixes in v5.4,
+SBS bar issues), which suggests remaining edge cases rather than one bug.
+Plan of attack:
+
+1. Catalog the known glitch scenarios (screen transitions during the 500ms
+   fade, track change while in a menu, albums with no/low-color art,
+   theme switches with dynamic colors enabled) and reproduce each in the
+   simulator.
+2. Audit the color state machine for transition races — the recurring
+   flicker/gap pattern points at draw-order and stale-color windows during
+   screen changes.
+3. Extract the color extraction/quantization and fade-interpolation logic
+   into pure helpers with unit tests in `tests/` (golden-value tests for
+   representative album art), so future changes can't silently regress.
+4. Improvements while in there: better accent-color choice for low-contrast
+   art, and a sane fallback palette when extraction yields unusable colors.
+
+### 1.4 Build error from main — P1, effort S
 
 - **Source:** [rockpod#22](https://github.com/nuxcodes/rockpod/issues/22)
 - **Area:** build system
@@ -61,7 +87,7 @@ builds clean from a fresh clone with the documented toolchain
 needed. Cheap insurance for every other item on this list — and a natural
 companion to the CI work in 4.3.
 
-### 1.4 Sony PHA-1A: detected but no USB audio — P2, effort M
+### 1.5 Sony PHA-1A: detected but no USB audio — P2, effort M
 
 - **Source:** [rockpod#24](https://github.com/nuxcodes/rockpod/issues/24)
 - **Area:** MFi/iAP digital audio (`firmware/target/arm/s5l8702/` USB stack,
@@ -245,13 +271,15 @@ in rockpod#19 and backstops every other roadmap item.
 
 ## Suggested order of attack
 
-1. **4.3 CI** + **1.3 build check** — make every later change verifiable.
+1. **4.3 CI** + **1.4 build check** — make every later change verifiable.
 2. **2.2 anti-repeat shuffle** — small, pure-logic, exercises the TDD
    harness end to end.
-3. **2.1 disk-locality shuffle** — the flagship feature, building on 2.2's
+3. **1.3 dynamic colors hardening** — user-visible glitches, fully
+   reproducible in the simulator, and yields reusable unit tests.
+4. **2.1 disk-locality shuffle** — the flagship feature, building on 2.2's
    test scaffolding.
-4. **1.1 hi-res FLAC race** — highest-impact bug; needs SSD hardware and
+5. **1.1 hi-res FLAC race** — highest-impact bug; needs SSD hardware and
    instrumentation time.
-5. **3.1 / 3.2 PR ports** — quick community-visible wins.
-6. **4.1 fork point** → **4.2 cherry-picks** — background maintenance
+6. **3.1 / 3.2 PR ports** — quick community-visible wins.
+7. **4.1 fork point** → **4.2 cherry-picks** — background maintenance
    track.
