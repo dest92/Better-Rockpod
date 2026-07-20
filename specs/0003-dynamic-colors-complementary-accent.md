@@ -1,8 +1,11 @@
 # 0003: Dynamic colors — mathematically derived complementary accent
 
-- **Status:** Implemented (A1–A4 verified by unit tests; A5 simulator
-  and A6 hardware builds pending — no SDL2/ARM toolchain in the
-  implementation environment)
+- **Status:** Implemented. A1–A4 verified by unit tests. A5 partially
+  verified: full ipod6g simulator build compiles the integration
+  warning-free and boots headless (SDL dummy video driver, local SDL2);
+  visual inspection of accent colors with real album art still needs a
+  local simulator/device run. A6 hardware builds pending (no ARM
+  toolchain in the implementation environment).
 - **Branch/PR:** claude/rockpod-features-roadmap-qg0tc3
 
 ## Problem
