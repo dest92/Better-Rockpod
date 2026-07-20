@@ -73,8 +73,23 @@ Plan of attack:
 3. Extract the color extraction/quantization and fade-interpolation logic
    into pure helpers with unit tests in `tests/` (golden-value tests for
    representative album art), so future changes can't silently regress.
-4. Improvements while in there: better accent-color choice for low-contrast
-   art, and a sane fallback palette when extraction yields unusable colors.
+4. **Mathematically computed complementary accent** for low-contrast art.
+   The current accent picker (`skin_albumart_color.c:250`) takes the best
+   saturated histogram bucket whose luminance differs from the dominant by
+   ≥ `MIN_CONTRAST` (a plain luminance delta, `:38`), falls back to pure
+   black/white, and then force-scales channels toward a target luminance
+   (`:329`). Two failure modes: monochromatic/low-chroma art yields the
+   harsh black/white fallback, and the proportional scaling clips at 255,
+   shifting hue and undershooting the luminance target — both produce the
+   poor-contrast results seen in practice. Instead, derive the accent
+   mathematically from the dominant color: convert to HSV in fixed point
+   (no floats on target), rotate hue 180° to the complement, then pick
+   saturation/value to guarantee the contrast target against the dominant.
+   Use it as the fallback when no histogram bucket passes contrast (or
+   blend it with the extracted accent), and consider upgrading the
+   contrast metric itself from a raw luminance delta to a perceptual
+   (WCAG-style) ratio. Pure math → ideal unit-test target with
+   golden values per input color.
 
 ### 1.4 Build error from main — P1, effort S
 
