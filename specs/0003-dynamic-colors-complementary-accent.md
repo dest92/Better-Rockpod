@@ -1,11 +1,12 @@
 # 0003: Dynamic colors — mathematically derived complementary accent
 
-- **Status:** Implemented. A1–A4 verified by unit tests. A5 partially
-  verified: full ipod6g simulator build compiles the integration
-  warning-free and boots headless (SDL dummy video driver, local SDL2);
-  visual inspection of accent colors with real album art still needs a
-  local simulator/device run. A6 hardware builds pending (no ARM
-  toolchain in the implementation environment).
+- **Status:** Implemented. A1–A4 verified by unit tests. A5 verified on
+  the ipod6g simulator (headless, scripted playback + screendumps):
+  monochrome embedded art produced the derived neutral accent at target
+  luminance (measured (139,141,139) on a charcoal dominant, luminance
+  delta ≈ 100, vs. pure white before); colorful art kept its extracted
+  orange accent unchanged, in the WPS and across menus. A6 hardware
+  builds pending (no ARM toolchain in the implementation environment).
 - **Branch/PR:** claude/rockpod-features-roadmap-qg0tc3
 
 ## Problem
