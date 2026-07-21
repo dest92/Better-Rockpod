@@ -117,6 +117,23 @@ audio work should help).
 
 ## 2. Features (fork ideas)
 
+### 2.0 Battery gauge calibration tool — P1, effort S ✅ **DONE**
+
+- **Source:** fork idea (from a battery-optimization analysis)
+- **Area:** `tools/battcal/` (spec 0006)
+
+On iPods with high-capacity LiPo replacements the battery percentage is
+wrong (stuck near 0%, or desynced after a dual boot) because Rockbox's
+voltage→percent table is calibrated for the original small Apple cells.
+Rockbox already loads a per-device override from
+`.rockbox/battery_levels.cfg` (`firmware/powermgmt.c:902`); the missing
+piece was generating that curve from a real discharge. `tools/battcal`
+turns a `battery_bench.txt` log into a calibrated `battery_levels.cfg`
+(charge- or time-based axis, monotonicity validation). Fixes the gauge,
+not autonomy. Actual power-consumption tuning (sleep timing) is the
+autonomy lever but is coupled to the hi-res FLAC race (1.1) and needs
+on-device validation — deliberately not shipped blind.
+
 ### 2.1 Disk-locality-aware shuffle for HDD — P1, effort M *(flagship)* ✅ **DONE**
 
 - **Source:** fork idea
