@@ -120,3 +120,45 @@ items that specs 0003/0004/0005 had deferred to CI.
 implemented, unit-tested, simulator-verified, and hardware-compiled in
 CI. On-device listening tests remain as user follow-ups (out of scope —
 no physical iPod in this environment).
+
+---
+
+## Battery work (specs 0006 / 0007 / 0008)
+
+Follow-on from two battery-optimization analyses, each claim verified
+against the code before acting.
+
+- **Spec 0006 — battery gauge calibration, PC tool** (`104f67e`).
+  `tools/battcal/` turns a `battery_bench.txt` discharge log into a
+  calibrated `battery_levels.cfg`. Fixes the wrong percentage (stuck at
+  0% / dual-boot desync) on high-capacity LiPo cells. 9 Python unit
+  tests; end-to-end run on a synthetic non-linear log.
+
+- **Spec 0007 — anti-premature-shutdown** (`4fff330`).
+  `firmware/powermgmt.c` powered off the moment the fast-filtered voltage
+  dipped below shutoff, with no debounce — and that branch runs precisely
+  during disk activity, so an SD-wake voltage sag could shut the device
+  off with real charge left. Now requires the below-shutoff condition to
+  persist for `LOWBATT_SHUTDOWN_SAMPLES` (4, ≈2 s) consecutive samples.
+  Pure debounce in `firmware/export/lowbatt_debounce.h`, 22 unit checks;
+  compiles in the sim (real `powermgmt.o`).
+
+- **Spec 0008 — battery calibration, on-device** (`ea42716`).
+  `apps/plugins/battcal.c` does the same calibration on the iPod without
+  a PC; the curve math is the pure, host-tested
+  `apps/plugins/lib/battcurve.h` (40 unit checks). Verified in the
+  simulator: launched the plugin against a synthetic log, it wrote a
+  valid `battery_levels.cfg` — byte-identical to the PC tool's output.
+
+Correction to the source analyses: Rockbox does **not** read raw ADC
+voltage — it already applies a 128-sample EWMA (~64 s), so "add a filter"
+was already done; the real premature-shutdown bug was the undebounced
+shutdown decision (0007). The remaining autonomy lever (more aggressive
+storage sleep) is coupled to the hi-res FLAC race (roadmap 1.1) and needs
+on-device validation, so it is deliberately not shipped blind.
+
+**CI:** runs 5/6/7 all green — host tests, simulator, and both hardware
+builds (ipod6g, ipodvideo) — so the powermgmt change and the new plugin
+compile clean on real targets. On-device confirmation (a real discharge
+log; no premature shutoff at low battery on a flash-modded iPod) remains
+a user follow-up.
