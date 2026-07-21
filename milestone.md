@@ -1,6 +1,6 @@
 # Milestone: Roadmap kickoff — colors, shuffle, CI
 
-- **Status:** In progress
+- **Status:** Complete ✅
 - **Branch:** `claude/rockpod-features-roadmap-qg0tc3`
 - **Roadmap:** [ROADMAP.md](ROADMAP.md)
 
@@ -29,8 +29,10 @@ verification.
 - [x] Each feature is exercised on the simulator, not just unit-tested
       (per the `verify` skill) — screenshots and/or scripted playback
       runs recorded in [progress.md](progress.md).
-- [ ] CI (`ci.yml`) green across all four jobs: host tests, simulator
-      build, hardware build ipod6g, hardware build ipodvideo.
+- [x] CI (`ci.yml`) green across all four jobs: host tests, simulator
+      build, hardware build ipod6g, hardware build ipodvideo. Confirmed
+      green on run #3 (`a5a8a58`) — this also serves as the hardware
+      compile check (A6/A7/A4) that specs 0003/0004/0005 had left to CI.
 - **Out of scope for this milestone:** on-device testing on real iPod
   hardware. No physical device is available in this working
   environment; hardware builds are verified by compiling in CI only.

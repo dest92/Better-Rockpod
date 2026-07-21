@@ -106,6 +106,17 @@ cross-assembler, breaking host tool compilation, which needs the
 runner's native `as`. Fix: drop the unprefixed directory from `PATH` —
 `tools/configure`/the Makefile only need the prefixed names.
 
-**Status:** fix pushed; awaiting the next CI run to confirm all four
-jobs are green (tracked as the open item in
-[milestone.md](milestone.md)).
+**Third run (`a5a8a58`):** all four jobs green — host tests, simulator
+build, and both hardware builds (ipod6g, ipodvideo). The ARM toolchain
+took ~21 min to build (the cache did not carry over from the failed
+runs, since a job must succeed to save its cache); the firmware builds
+themselves took ~4-5 min each and produced uploadable `rockbox.zip`
+artifacts. This green hardware build is also the first compile check of
+the disk-locality-shuffle code path (`HAVE_DISK_SHUFFLE`, which only
+compiles on hardware targets), and closes the A6/A7/A4 hardware-compile
+items that specs 0003/0004/0005 had deferred to CI.
+
+**Milestone complete.** All four items (specs 0003/0004/0005 + CI) are
+implemented, unit-tested, simulator-verified, and hardware-compiled in
+CI. On-device listening tests remain as user follow-ups (out of scope —
+no physical iPod in this environment).
