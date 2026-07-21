@@ -101,6 +101,58 @@ TEST(compute_rejects_bad)
              BATTCURVE_NONMONOTONIC);
 }
 
+/* battcurve_ring_rotate: this is the highest-corruption-risk logic in
+ * the plugin (wrong -> silently miscalibrated battery gauge), so it is
+ * checked against a naive reference over every (cap, total) combination
+ * a real bench run could produce, not just a couple of hand traces. */
+TEST(ring_rotate_matches_reference)
+{
+    int failures = 0;
+    for (int cap = 1; cap <= 9; cap++)
+    {
+        for (int total = cap; total <= cap * 3; total++)
+        {
+            int secs[9], mv[9], ma[9];
+            int head = 0;
+            /* simulate writing `total` samples (values 0..total-1) into
+             * a size-`cap` ring, keeping only the most recent `cap` */
+            for (int i = 0; i < total; i++)
+            {
+                secs[head] = i; mv[head] = i * 10; ma[head] = i * 100;
+                head = (head + 1) % cap;
+            }
+
+            battcurve_ring_rotate(secs, mv, ma, cap, head);
+
+            /* reference: the kept values are the most recent `cap`
+             * writes, i.e. (total - cap) .. (total - 1), in order */
+            int failed = 0;
+            for (int i = 0; i < cap; i++)
+            {
+                int expect = (total - cap) + i;
+                if (secs[i] != expect || mv[i] != expect * 10 ||
+                    ma[i] != expect * 100)
+                    failed = 1;
+            }
+            if (failed)
+                failures++;
+        }
+    }
+    CHECK_EQ(failures, 0);
+}
+
+/* head == 0 (log exactly filled the buffer, or an exact multiple of it)
+ * must be a no-op: already in chronological order. */
+TEST(ring_rotate_noop_when_aligned)
+{
+    int secs[4] = { 5, 6, 7, 8 };
+    int mv[4] = { 50, 60, 70, 80 };
+    int ma[4] = { 500, 600, 700, 800 };
+    battcurve_ring_rotate(secs, mv, ma, 4, 0);
+    CHECK_EQ(secs[0], 5); CHECK_EQ(secs[1], 6);
+    CHECK_EQ(secs[2], 7); CHECK_EQ(secs[3], 8);
+}
+
 int main(void)
 {
     RUN_TEST(parse_line_basic);
@@ -109,5 +161,7 @@ int main(void)
     RUN_TEST(compute_linear_time);
     RUN_TEST(compute_charge_axis_differs);
     RUN_TEST(compute_rejects_bad);
+    RUN_TEST(ring_rotate_matches_reference);
+    RUN_TEST(ring_rotate_noop_when_aligned);
     return rbtest_report();
 }

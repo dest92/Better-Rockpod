@@ -37,6 +37,35 @@ enum {
     BATTCURVE_NONMONOTONIC   /* noisy/interrupted run */
 };
 
+/* reverse the three parallel arrays over [lo, hi] (inclusive) */
+static inline void battcurve_reverse(int *secs, int *mv, int *ma,
+                                     int lo, int hi)
+{
+    while (lo < hi)
+    {
+        int ts = secs[lo]; secs[lo] = secs[hi]; secs[hi] = ts;
+        int tv = mv[lo];   mv[lo]   = mv[hi];   mv[hi]   = tv;
+        int ta = ma[lo];   ma[lo]   = ma[hi];   ma[hi]   = ta;
+        lo++; hi--;
+    }
+}
+
+/* secs/mv/ma hold `cap` samples written into a ring buffer whose next
+ * write position was `head` (i.e. the oldest kept sample sits at index
+ * `head`, and chronological order wraps from `head` back around through
+ * `head - 1`).  Rotate them in place into plain chronological order
+ * ([0] oldest .. [cap-1] newest) using the standard three-reversal
+ * rotation.  Caller only needs this when the log had more than `cap`
+ * samples (head==0 already means the buffer is in order and this is a
+ * harmless no-op). */
+static inline void battcurve_ring_rotate(int *secs, int *mv, int *ma,
+                                         int cap, int head)
+{
+    battcurve_reverse(secs, mv, ma, 0, head - 1);
+    battcurve_reverse(secs, mv, ma, head, cap - 1);
+    battcurve_reverse(secs, mv, ma, 0, cap - 1);
+}
+
 /* Parse one battery_bench.txt data row into seconds / millivolts /
  * milliamps.  *ma is set to -1 when there is no current column.  Returns
  * false for comment (#), blank, or malformed lines.  Fields are

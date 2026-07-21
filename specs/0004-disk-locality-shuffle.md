@@ -8,6 +8,18 @@
   implementation environment) — note the disk path itself
   (`HAVE_DISK_SHUFFLE`) only compiles on hardware targets, so A7 is its
   first compile check. On-disk locality effect needs an HDD iPod.
+
+  **Follow-up code review** found and fixed: (1) a use-after-move risk in
+  the gather loop — cached buflib pointers were held across a call that
+  can yield, now re-fetched per iteration; (2) the in-place permutation
+  was untested — extracted to `shuffle_locality_apply2()` and now
+  exhaustively tested over every permutation of n≤7; (3) a genuine
+  null-pointer-dereference bug in `dircache_get_fileref_firstcluster()`
+  — it didn't handle a volume-root fileref (`idx < 0`), which `get_entry()`
+  resolves to NULL. Fixed to check the sign explicitly, matching the
+  existing `get_path_sub()` pattern this accessor was modeled on. This
+  fix can only be compile-checked by CI (`dircache.c` isn't built in the
+  simulator).
 - **Branch/PR:** claude/rockpod-features-roadmap-qg0tc3
 
 ## Problem

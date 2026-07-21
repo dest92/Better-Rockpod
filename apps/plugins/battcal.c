@@ -31,23 +31,11 @@
 #define MAX_SAMPLES   4096
 #define BATTCAL_LINE_MAX      160
 
-/* reverse the three parallel arrays over [lo, hi] */
-static void reverse_samples(int *secs, int *mv, int *ma, int lo, int hi)
-{
-    while (lo < hi)
-    {
-        int ts = secs[lo]; secs[lo] = secs[hi]; secs[hi] = ts;
-        int tv = mv[lo];   mv[lo]   = mv[hi];   mv[hi]   = tv;
-        int ta = ma[lo];   ma[lo]   = ma[hi];   ma[hi]   = ta;
-        lo++; hi--;
-    }
-}
-
 /* Read parsed samples into secs/mv/ma, keeping the most recent `cap`
  * (the low-voltage end of the discharge is what matters).  Writing into a
  * ring makes each line O(1) instead of shifting the whole array; when the
- * log overflows, a standard three-reversal rotation puts the window back
- * in chronological order. */
+ * log overflows, battcurve_ring_rotate() (pure, host-tested) puts the
+ * window back in chronological order. */
 static int read_samples(int *secs, int *mv, int *ma, int cap)
 {
     int fd = rb->open(BATTERY_LOG, O_RDONLY);
@@ -72,11 +60,7 @@ static int read_samples(int *secs, int *mv, int *ma, int cap)
     if (total <= cap)
         return total;   /* no wrap: already in order at [0, total) */
 
-    /* wrapped: oldest kept sample is at `head`. Left-rotate [0,cap) by
-     * `head` (reverse halves, then the whole) to restore order. */
-    reverse_samples(secs, mv, ma, 0, head - 1);
-    reverse_samples(secs, mv, ma, head, cap - 1);
-    reverse_samples(secs, mv, ma, 0, cap - 1);
+    battcurve_ring_rotate(secs, mv, ma, cap, head);
     return cap;
 }
 
