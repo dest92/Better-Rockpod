@@ -228,3 +228,10 @@ and lossy formats on a 6G/7G, skipped through repeatedly, should no
 longer hang. May also help rockpod#17 (hi-res files cross the same
 sample-rate boundary), but that issue's SSD-power-management hypothesis
 is a separate, still-unverified angle — not claimed as closed.
+
+**CI (run 11, `2cab057`):** all four jobs green, including `Hardware
+build (ipod6g)` — the only automated check possible for spec 0009, since
+`pcm-s5l8702.c`/`cs42l55.c` aren't part of the simulator build.
+`ipodvideo` also compiled clean, confirming the fix doesn't affect the
+5G build. On-device confirmation (A3/A4 in the spec) remains the only
+open item to close out rockpod#13/#17.

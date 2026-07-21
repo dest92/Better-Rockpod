@@ -1,6 +1,12 @@
 # 0009: iPod Classic 6G/7G playback hang on sample-rate change
 
-- **Status:** Draft
+- **Status:** Implemented. A1 confirmed in CI: both `ipod6g` (the target
+  this fix touches) and `ipodvideo` compile clean. A2 confirmed by
+  inspection (mute calls only bracket the existing frequency-change
+  branch; the `pcm-s5l8702.c`/`cs42l55.c` files are not part of the
+  simulator build, so no local runtime check was possible here, same as
+  the spec 0004 dircache precedent). A3/A4 are on-device criteria and
+  remain open — this is the only thing left to close out rockpod#13/#17.
 - **Branch/PR:** claude/rockpod-features-roadmap-qg0tc3
 
 ## Problem
