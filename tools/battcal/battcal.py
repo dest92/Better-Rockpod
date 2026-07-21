@@ -166,8 +166,10 @@ def main(argv=None):
         sys.stderr.write("error: %s\n" % e)
         return 1
 
-    shutoff = info["v_min"] - 50
-    disksafe = info["v_min"]
+    # Suggest thresholds at/above the lowest voltage actually reached;
+    # never advise running below what the bench validated.
+    shutoff = info["v_min"]
+    disksafe = info["v_min"] + 50
     cfg = format_cfg(curve, shutoff, disksafe)
 
     sys.stderr.write(

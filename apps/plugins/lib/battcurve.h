@@ -113,8 +113,13 @@ static inline int battcurve_interp(const long *axis, const int *volt,
  * every sample has it and force_time is false, else elapsed time.  The
  * log's own level column is deliberately never used.  *used_charge is set
  * to 1/0 for the axis chosen. */
+/* axis is caller-provided scratch of at least axis_cap longs (pass one
+ * slot per sample); n is clamped to it.  Keeping the scratch out of the
+ * function makes it pure and reentrant, matching the fork's other pure
+ * helpers (shuffle_locality.h, aa_color_math.h). */
 static inline int battcurve_compute(const int *secs, const int *mv,
                                     const int *ma, int n, int force_time,
+                                    long *axis, int axis_cap,
                                     unsigned short out[BATTCURVE_POINTS],
                                     int *used_charge)
 {
@@ -127,9 +132,8 @@ static inline int battcurve_compute(const int *secs, const int *mv,
             have_current = false;
 
     /* cumulative consumed axis (charge or time), non-decreasing from 0 */
-    static long axis[8192];
-    if (n > (int)(sizeof(axis) / sizeof(axis[0])))
-        n = (int)(sizeof(axis) / sizeof(axis[0]));
+    if (n > axis_cap)
+        n = axis_cap;
     axis[0] = 0;
     for (int i = 1; i < n; i++)
     {

@@ -769,6 +769,11 @@ static inline void power_thread_step(void)
             sys_poweroff();
         }
     }
+    else {
+        /* not evaluating the low-battery path (e.g. charge recovered
+         * while the disk stayed active) — drop any stale sag streak */
+        lowbatt_shutdown_consec = 0;
+    }
 } /* power_thread_step */
 
 static void power_thread(void)

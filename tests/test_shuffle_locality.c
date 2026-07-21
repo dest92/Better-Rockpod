@@ -4,6 +4,7 @@
  */
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include "rbtest.h"
 #include "shuffle_locality.h"
 
@@ -236,6 +237,71 @@ TEST(repeat_retry_converges)
     CHECK(tries < 8);
 }
 
+/* --- shuffle_locality_apply2: the in-place two-array permutation used by
+ * playlist.c to reorder indices[] and dcfrefs[] together (spec 0004).
+ * This is the highest-corruption-risk code, so it is exercised against a
+ * reference over every permutation of small n. --- */
+
+static int apply_failures;
+
+static void check_one_perm(const int *perm, int n)
+{
+    struct shuffle_loc_ent e[8];
+    unsigned long a[8];        /* stands in for playlist indices[] */
+    unsigned short b[8];       /* stands in for a second parallel array */
+    unsigned short bscratch;
+
+    for (int i = 0; i < n; i++)
+    {
+        e[i].idx = perm[i];
+        e[i].key = 0;
+        a[i] = (unsigned long)(100 + i);
+        b[i] = (unsigned short)(1000 + i);
+    }
+
+    shuffle_locality_apply2(e, n, a, (char *)b, sizeof(b[0]),
+                            (char *)&bscratch);
+
+    for (int i = 0; i < n; i++)
+    {
+        /* new[i] must equal old[perm[i]] for both parallel arrays */
+        if (a[i] != (unsigned long)(100 + perm[i]) ||
+            b[i] != (unsigned short)(1000 + perm[i]))
+            apply_failures++;
+    }
+}
+
+/* recursively enumerate every permutation of {0..n-1} and test each */
+static void gen_perms(int *perm, bool *used, int n, int depth)
+{
+    if (depth == n)
+    {
+        check_one_perm(perm, n);
+        return;
+    }
+    for (int v = 0; v < n; v++)
+    {
+        if (used[v])
+            continue;
+        used[v] = true;
+        perm[depth] = v;
+        gen_perms(perm, used, n, depth + 1);
+        used[v] = false;
+    }
+}
+
+TEST(apply2_all_permutations)
+{
+    apply_failures = 0;
+    for (int n = 0; n <= 7; n++)
+    {
+        int perm[8];
+        bool used[8] = { false };
+        gen_perms(perm, used, n, 0);
+    }
+    CHECK_EQ(apply_failures, 0);
+}
+
 int main(void)
 {
     RUN_TEST(valid_permutation);
@@ -244,5 +310,6 @@ int main(void)
     RUN_TEST(unknown_keys);
     RUN_TEST(repeat_overlap_counts);
     RUN_TEST(repeat_retry_converges);
+    RUN_TEST(apply2_all_permutations);
     return rbtest_report();
 }

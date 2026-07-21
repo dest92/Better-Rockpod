@@ -31,6 +31,23 @@
 #define MAX_SAMPLES   4096
 #define BATTCAL_LINE_MAX      160
 
+/* reverse the three parallel arrays over [lo, hi] */
+static void reverse_samples(int *secs, int *mv, int *ma, int lo, int hi)
+{
+    while (lo < hi)
+    {
+        int ts = secs[lo]; secs[lo] = secs[hi]; secs[hi] = ts;
+        int tv = mv[lo];   mv[lo]   = mv[hi];   mv[hi]   = tv;
+        int ta = ma[lo];   ma[lo]   = ma[hi];   ma[hi]   = ta;
+        lo++; hi--;
+    }
+}
+
+/* Read parsed samples into secs/mv/ma, keeping the most recent `cap`
+ * (the low-voltage end of the discharge is what matters).  Writing into a
+ * ring makes each line O(1) instead of shifting the whole array; when the
+ * log overflows, a standard three-reversal rotation puts the window back
+ * in chronological order. */
 static int read_samples(int *secs, int *mv, int *ma, int cap)
 {
     int fd = rb->open(BATTERY_LOG, O_RDONLY);
@@ -38,30 +55,29 @@ static int read_samples(int *secs, int *mv, int *ma, int cap)
         return -1;
 
     char line[BATTCAL_LINE_MAX];
-    int n = 0;
+    int total = 0, head = 0;
     while (rb->read_line(fd, line, sizeof(line)) > 0)
     {
         int s, v, a;
         if (!battcurve_parse_line(line, &s, &v, &a))
             continue;
-        if (n >= cap)
-        {
-            /* keep the most recent samples: drop the oldest */
-            for (int i = 1; i < cap; i++)
-            {
-                secs[i - 1] = secs[i];
-                mv[i - 1] = mv[i];
-                ma[i - 1] = ma[i];
-            }
-            n = cap - 1;
-        }
-        secs[n] = s;
-        mv[n] = v;
-        ma[n] = a;
-        n++;
+        secs[head] = s;
+        mv[head] = v;
+        ma[head] = a;
+        head = (head + 1) % cap;
+        total++;
     }
     rb->close(fd);
-    return n;
+
+    if (total <= cap)
+        return total;   /* no wrap: already in order at [0, total) */
+
+    /* wrapped: oldest kept sample is at `head`. Left-rotate [0,cap) by
+     * `head` (reverse halves, then the whole) to restore order. */
+    reverse_samples(secs, mv, ma, 0, head - 1);
+    reverse_samples(secs, mv, ma, head, cap - 1);
+    reverse_samples(secs, mv, ma, 0, cap - 1);
+    return cap;
 }
 
 static bool write_cfg(const unsigned short *curve, int shutoff, int disksafe)
@@ -90,12 +106,14 @@ enum plugin_status plugin_start(const void *parameter)
 
     size_t bufsize;
     char *buf = rb->plugin_get_buffer(&bufsize);
-    if (bufsize < (size_t)MAX_SAMPLES * 3 * sizeof(int))
+    /* axis (long) first for alignment, then the three int arrays */
+    if (bufsize < (size_t)MAX_SAMPLES * (sizeof(long) + 3 * sizeof(int)))
     {
         rb->splash(2 * HZ, "Not enough memory");
         return PLUGIN_ERROR;
     }
-    int *secs = (int *)buf;
+    long *axis = (long *)buf;
+    int *secs = (int *)(axis + MAX_SAMPLES);
     int *mv = secs + MAX_SAMPLES;
     int *ma = mv + MAX_SAMPLES;
 
@@ -108,7 +126,8 @@ enum plugin_status plugin_start(const void *parameter)
 
     unsigned short curve[BATTCURVE_POINTS];
     int used_charge = 0;
-    int rc = battcurve_compute(secs, mv, ma, n, 0, curve, &used_charge);
+    int rc = battcurve_compute(secs, mv, ma, n, 0, axis, MAX_SAMPLES,
+                               curve, &used_charge);
 
     if (rc == BATTCURVE_TOO_SHORT)
     {
@@ -130,8 +149,10 @@ enum plugin_status plugin_start(const void *parameter)
         !rb->yesno_pop("Overwrite existing battery_levels.cfg?"))
         return PLUGIN_OK;
 
+    /* Suggest thresholds at/above the lowest voltage actually reached
+     * (curve[0]); never advise running below what the bench validated. */
     int vmin = curve[0];
-    if (!write_cfg(curve, vmin - 50, vmin))
+    if (!write_cfg(curve, vmin, vmin + 50))
     {
         rb->splash(3 * HZ, "Could not write cfg");
         return PLUGIN_ERROR;

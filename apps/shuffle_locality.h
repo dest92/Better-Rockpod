@@ -125,6 +125,45 @@ static inline void shuffle_locality_order(struct shuffle_loc_ent *ents,
     shuffle_loc_fy(ents + known, n - known);
 }
 
+/* Apply the permutation described by ents[] to two parallel arrays in
+ * place: after ordering, position i should hold the element that was at
+ * position ents[i].idx.  a[] is an unsigned long array (playlist
+ * indices); b[] is an array of bsz-byte elements (dircache filerefs),
+ * with bscratch pointing at one bsz-byte temporary.  Both arrays are
+ * permuted identically.  ents[].idx is consumed (set to -1).
+ *
+ * Cycle-walking keeps this allocation-free and touches only memory the
+ * caller already holds, so it never yields — safe to run while holding
+ * buflib pointers.  Exhaustively unit-tested in test_shuffle_locality.c. */
+static inline void shuffle_locality_apply2(struct shuffle_loc_ent *ents,
+                                           int n, unsigned long *a,
+                                           char *b, size_t bsz,
+                                           char *bscratch)
+{
+    for (int i = 0; i < n; i++)
+    {
+        if (ents[i].idx < 0)
+            continue;
+        int cur = i;
+        unsigned long saved_a = a[i];
+        memcpy(bscratch, b + (size_t)i * bsz, bsz);
+        while (1)
+        {
+            int src = ents[cur].idx;
+            ents[cur].idx = -1;
+            if (src == i)
+            {
+                a[cur] = saved_a;
+                memcpy(b + (size_t)cur * bsz, bscratch, bsz);
+                break;
+            }
+            a[cur] = a[src];
+            memcpy(b + (size_t)cur * bsz, b + (size_t)src * bsz, bsz);
+            cur = src;
+        }
+    }
+}
+
 /* Max tracks considered "recently played" by the repeat anti-repeat */
 #define SHUFFLE_ANTIREPEAT_MAX 10
 

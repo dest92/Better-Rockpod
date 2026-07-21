@@ -1560,16 +1560,21 @@ static bool randomise_playlist_disk_unlocked(struct playlist_info* playlist)
     if (handle <= 0)
         return false;
 
-    struct shuffle_loc_ent *ents = core_get_data(handle);
-    struct shuffle_loc_ent *aux = ents + n;
-    int *region_perm = (int *)(aux + n);
-    struct dircache_fileref *dcfrefs =
-        core_get_data(playlist->dcfrefs_handle);
-
+    /* Gather the disk-position key for each track.  Both the scratch
+     * (handle) and dcfrefs buffers are plain core_alloc allocations,
+     * which buflib may relocate when another thread allocates.
+     * dircache_get_fileref_firstcluster() locks dircache and can yield,
+     * so re-fetch both pointers every iteration and copy the fileref to
+     * a local before the call — do NOT hoist these out of the loop. */
     int missing = 0;
     for (int i = 0; i < n; i++)
     {
-        long cluster = dircache_get_fileref_firstcluster(&dcfrefs[i]);
+        struct dircache_fileref *dcfrefs =
+            core_get_data(playlist->dcfrefs_handle);
+        struct dircache_fileref ref = dcfrefs[i];
+        long cluster = dircache_get_fileref_firstcluster(&ref);
+
+        struct shuffle_loc_ent *ents = core_get_data(handle);
         ents[i].key = cluster >= 0 ? cluster : SHUFFLE_KEY_UNKNOWN;
         ents[i].idx = i;
         if (cluster < 0)
@@ -1583,32 +1588,18 @@ static bool randomise_playlist_disk_unlocked(struct playlist_info* playlist)
         return false;
     }
 
+    /* From here on nothing yields, so cached buflib pointers stay valid. */
+    struct shuffle_loc_ent *ents = core_get_data(handle);
+    struct shuffle_loc_ent *aux = ents + n;
+    int *region_perm = (int *)(aux + n);
     shuffle_locality_order(ents, aux, region_perm, n);
 
-    /* apply the permutation in place (cycle walking): position i takes
-     * the track that was at position ents[i].idx */
-    for (int i = 0; i < n; i++)
-    {
-        if (ents[i].idx < 0)
-            continue;
-        int cur = i;
-        unsigned long saved_index = playlist->indices[i];
-        struct dircache_fileref saved_ref = dcfrefs[i];
-        while (1)
-        {
-            int src = ents[cur].idx;
-            ents[cur].idx = -1;
-            if (src == i)
-            {
-                playlist->indices[cur] = saved_index;
-                dcfrefs[cur] = saved_ref;
-                break;
-            }
-            playlist->indices[cur] = playlist->indices[src];
-            dcfrefs[cur] = dcfrefs[src];
-            cur = src;
-        }
-    }
+    struct dircache_fileref *dcfrefs =
+        core_get_data(playlist->dcfrefs_handle);
+    struct dircache_fileref scratch;
+    shuffle_locality_apply2(ents, n, playlist->indices,
+                            (char *)dcfrefs, sizeof(*dcfrefs),
+                            (char *)&scratch);
 
     core_free(handle);
     return true;
