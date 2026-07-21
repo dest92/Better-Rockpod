@@ -117,22 +117,30 @@ audio work should help).
 
 ## 2. Features (fork ideas)
 
-### 2.0 Battery gauge calibration tool — P1, effort S ✅ **DONE**
+### 2.0 Battery improvements — P1 ✅ **DONE** (3 specs)
 
-- **Source:** fork idea (from a battery-optimization analysis)
-- **Area:** `tools/battcal/` (spec 0006)
+From a battery-optimization analysis, verified against the code. Three
+shipped pieces:
 
-On iPods with high-capacity LiPo replacements the battery percentage is
-wrong (stuck near 0%, or desynced after a dual boot) because Rockbox's
-voltage→percent table is calibrated for the original small Apple cells.
-Rockbox already loads a per-device override from
-`.rockbox/battery_levels.cfg` (`firmware/powermgmt.c:902`); the missing
-piece was generating that curve from a real discharge. `tools/battcal`
-turns a `battery_bench.txt` log into a calibrated `battery_levels.cfg`
-(charge- or time-based axis, monotonicity validation). Fixes the gauge,
-not autonomy. Actual power-consumption tuning (sleep timing) is the
-autonomy lever but is coupled to the hi-res FLAC race (1.1) and needs
-on-device validation — deliberately not shipped blind.
+- **Gauge calibration, PC tool** (`tools/battcal/`, spec 0006) — turns a
+  `battery_bench.txt` log into a calibrated `battery_levels.cfg` so the
+  percentage reads correctly on high-capacity LiPo cells (stuck-at-0% /
+  dual-boot desync). Charge- or time-based axis, monotonicity check.
+- **Gauge calibration, on-device** (`apps/plugins/battcal.c` + pure
+  `apps/plugins/lib/battcurve.h`, spec 0008) — the same calibration
+  without a PC: a plugin computes the curve from the log and writes the
+  cfg. Output is byte-identical to the PC tool.
+- **Anti-premature-shutdown** (`firmware/powermgmt.c` +
+  `firmware/export/lowbatt_debounce.h`, spec 0007) — debounces the
+  low-battery shutdown so a transient SD-wake voltage sag can't power
+  the device off with real charge left. This is the part that makes it
+  "not shut off early".
+
+Note: the voltage gauge is already heavily filtered upstream (128-sample
+EWMA, ~64 s) — the common "add a filter" suggestion is already done. The
+remaining *autonomy* lever (more aggressive storage sleep) is coupled to
+the hi-res FLAC race (1.1) and needs on-device validation, so it is
+deliberately not shipped blind.
 
 ### 2.1 Disk-locality-aware shuffle for HDD — P1, effort M *(flagship)* ✅ **DONE**
 
