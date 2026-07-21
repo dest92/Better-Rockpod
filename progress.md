@@ -1,0 +1,111 @@
+# Progress log
+
+Chronological log for the [milestone.md](milestone.md) work. One entry per
+spec/task; newest at the bottom. Commit hashes refer to
+`claude/rockpod-features-roadmap-qg0tc3`.
+
+---
+
+## ROADMAP.md written (`0910744`, `acf6c7b`, `fab9a94`)
+
+Compiled from three sources: fork-grounded feature ideas, triage of open
+[nuxcodes/rockpod](https://github.com/nuxcodes/rockpod) issues/PRs, and an
+upstream Rockbox sync strategy. Refined twice more with the user: added
+the dynamic-colors hardening item (1.3) and detailed the complementary-
+accent design within it.
+
+## Spec 0003 — Dynamic colors complementary accent (`b5376e0`, `120f8c5`, `0e5cd47`)
+
+**Problem:** the accent (text) color picker in
+`apps/gui/skin_engine/skin_albumart_color.c` fell back to pure black/white
+for monochrome/low-saturation album art, and its readability-correction
+step scaled RGB channels proportionally, clipping at 255 and shifting hue
+instead of reaching the target luminance.
+
+**Implementation:** new pure header `apps/gui/skin_engine/aa_color_math.h`
+— integer RGB↔HSV conversion, complementary-hue derivation with the value
+solved by binary search so contrast is met by construction, and an
+HSV-space contrast fix that preserves hue. Wired into the two failing
+branches of `skin_albumart_color.c` with a 15-line diff.
+
+**Verified:**
+- 32 unit checks (`tests/test_aa_color_math.c`), ASan/UBSan clean.
+- Built SDL2 in this container from Ubuntu's `libsdl2-dev` headers +
+  a manylinux `pysdl2-dll` wheel's shared lib (no libsdl.org/GitHub
+  access through the environment's proxy) to get the `ipod6g` simulator
+  compiling and running headless here.
+- Simulator, scripted via a temporary (never-committed) autopilot patch
+  to `sim_tasks.c` driving SDL key events + Rockbox's built-in
+  `screen_dump()`: monochrome test art produced the derived neutral
+  accent (measured pixel (139,141,139), luminance delta ≈100 vs. the old
+  pure white); colorful art kept its extracted accent unchanged (R5).
+  Screenshots sent to the user.
+- Hardware compile (A6): deferred, no ARM toolchain in this session at
+  the time — later covered by CI (see below).
+
+## Spec 0004 — Disk-locality-aware shuffle for HDD (`f914cf8`)
+
+**Problem:** shuffle is a plain Fisher-Yates with no notion of physical
+disk layout, so HDD iPods seek across the whole platter on every
+rebuffer.
+
+**Implementation:** locality key = FAT first-cluster, read from the
+dircache fileref already kept per playlist track (new accessor
+`dircache_get_fileref_firstcluster()`); pure ordering algorithm in
+`apps/shuffle_locality.h` (sort by key, shuffle 32-track regions and
+region order); new `disk_shuffle` setting; new `H:` playlist-control
+command so resume replays the identical order; transparent fallback to
+plain shuffle off HDD, in the simulator, or when dircache data is
+missing.
+
+**Verified:**
+- 36 unit checks (permutation validity, determinism, locality ratio,
+  unknown-key handling).
+- Simulator: with the setting on, shuffled playback, clean shutdown, and
+  resume landed on the same track at the same position (fallback path,
+  since the simulator has no dircache/ATA).
+
+## Spec 0005 — Repeat Shuffle anti-repeat (`4ec8795`)
+
+**Problem:** Repeat Shuffle re-shuffles with a fresh seed on wrap, so a
+track can repeat right after the previous pass ended.
+
+**Implementation:** `shuffle_repeat_overlap()` helper in
+`shuffle_locality.h`; the wrap handler in `apps/playlist.c` retries up to
+8 seeds, keeping the one with the least (ideally zero) overlap between
+the new pass's first K tracks and the last K played, then commits only
+that seed — so resume reproduces the exact result. Works with either
+plain or disk-locality shuffle underneath.
+
+**Verified:**
+- 7 more unit checks (overlap counting, retry convergence).
+- Simulator: repeat=shuffle playback wrapped cleanly with exactly one
+  shuffle command recorded per wrap.
+
+## CI workflow added (`bf9dfa1`, `0c8d5de`)
+
+`.github/workflows/ci.yml`: host unit tests, `ipod6g` simulator build,
+and hardware builds for `ipod6g`/`ipodvideo` (ARM cross-toolchain built
+by `tools/rockboxdev.sh`, cached between runs). Answers
+[rockpod#19](https://github.com/nuxcodes/rockpod/issues/19).
+
+**First CI run (`bf9dfa1`):** host tests ✅, simulator build in progress
+when checked; both hardware jobs failed immediately —
+`rockboxdev.sh` needs `libtool` (and `automake`/`autoconf`), not in the
+initial apt package list. Fixed in `0c8d5de`.
+
+**Second run (`0c8d5de`):** host tests ✅, simulator ✅. Toolchain build
+now succeeded (~24 min) and is cached, but both hardware jobs failed at
+the actual firmware build: `as: unrecognized option '--64'` compiling
+Rockbox's *host-side* helper tools (`rdf2binary`, `bmp2rb`, `codepages`,
+`convbdf` — these run on the CI runner, not the iPod). Root cause: the
+workflow put both `$HOME/rbdev/bin` (prefixed `arm-elf-eabi-gcc` etc.)
+and `$HOME/rbdev/arm-elf-eabi/bin` (GCC's *unprefixed* per-target bin
+dir) on `PATH`; the unprefixed dir shadows the system `as` with the ARM
+cross-assembler, breaking host tool compilation, which needs the
+runner's native `as`. Fix: drop the unprefixed directory from `PATH` —
+`tools/configure`/the Makefile only need the prefixed names.
+
+**Status:** fix pushed; awaiting the next CI run to confirm all four
+jobs are green (tracked as the open item in
+[milestone.md](milestone.md)).

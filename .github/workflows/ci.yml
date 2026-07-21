@@ -56,7 +56,12 @@ jobs:
           RBDEV_PREFIX="$HOME/rbdev" RBDEV_TARGET=a ./tools/rockboxdev.sh
       - name: Configure and build ${{ matrix.target }}
         run: |
-          export PATH="$HOME/rbdev/bin:$HOME/rbdev/arm-elf-eabi/bin:$PATH"
+          # Only the prefixed bin dir (arm-elf-eabi-gcc, etc). The
+          # unprefixed $HOME/rbdev/arm-elf-eabi/bin also exists but
+          # shadows the host's own `as`/`ld`, breaking the host-side
+          # helper tools (rdf2binary, bmp2rb, ...) that this build
+          # compiles for the runner itself.
+          export PATH="$HOME/rbdev/bin:$PATH"
           mkdir build-hw && cd build-hw
           ../tools/configure --target=${{ matrix.target }} --type=n
           make -j"$(nproc)"
