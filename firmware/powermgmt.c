@@ -33,6 +33,7 @@
 #include "audio.h"
 #include "usb.h"
 #include "powermgmt.h"
+#include "lowbatt_debounce.h"
 #include "backlight.h"
 #include "lcd.h"
 #include "rtc.h"
@@ -106,6 +107,7 @@ enum charge_state_type charge_state = DISCHARGING;
 #endif /* CONFIG_CHARGING */
 
 static int shutdown_timeout = 0;
+static int lowbatt_shutdown_consec = 0; /* consecutive below-shutoff samples */
 
 void handle_auto_poweroff(void);
 static int poweroff_timeout = 0;
@@ -743,6 +745,7 @@ static inline void power_thread_step(void)
     ) {
         average_step(false);
         battery_status_update();
+        lowbatt_shutdown_consec = 0;
     }
     else if (percent_now < 8) {
         average_step(true);
@@ -752,8 +755,17 @@ static inline void power_thread_step(void)
          * If battery is low, observe voltage during disk activity.
          * Shut down if voltage drops below shutoff level and we are not
          * using NiMH or Alkaline batteries.
+         *
+         * Debounce the decision: a flash storage controller waking to
+         * refill the buffer briefly sags the cell voltage, and this
+         * branch runs precisely during that disk activity.  Require the
+         * below-shutoff condition to persist for a few consecutive
+         * samples so a transient sag can't force a premature power off
+         * while real charge remains (specs/0007).
          */
-        if (!shutdown_timeout && query_force_shutdown()) {
+        if (!shutdown_timeout &&
+            lowbatt_shutdown_debounce(query_force_shutdown(),
+                                      &lowbatt_shutdown_consec)) {
             sys_poweroff();
         }
     }
