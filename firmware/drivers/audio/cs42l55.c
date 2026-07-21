@@ -51,7 +51,7 @@ static void cscodec_setbits(int reg, unsigned char off, unsigned char on)
     cscodec_write(reg, data);
 }
 
-static void audiohw_mute(bool mute)
+void audiohw_mute(bool mute)
 {
     if (mute) cscodec_setbits(PLAYCTL, 0, PLAYCTL_MSTAMUTE | PLAYCTL_MSTBMUTE);
     else cscodec_setbits(PLAYCTL, PLAYCTL_MSTAMUTE | PLAYCTL_MSTBMUTE, 0);

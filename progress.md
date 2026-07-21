@@ -162,3 +162,69 @@ builds (ipod6g, ipodvideo) — so the powermgmt change and the new plugin
 compile clean on real targets. On-device confirmation (a real discharge
 log; no premature shutoff at low battery on a flash-modded iPod) remains
 a user follow-up.
+
+---
+
+## Code review follow-up (two rounds) — battery + shuffle work
+
+User asked for a code review of the battery/shuffle work focused on
+runtime correctness, clean code, reuse, and testing.
+
+**Round 1** found and fixed: F1 (buflib use-after-move risk in the disk-
+shuffle gather loop — cached pointers held across a call that can yield;
+re-fetch per iteration), F2 (the in-place permutation was untested —
+extracted to `shuffle_locality_apply2()` and exhaustively tested over
+every permutation of n≤7), F3 (a 64 KB non-reentrant `static` hidden
+inside `battcurve_compute()` — now caller-provided scratch), F4 (O(n²)
+oldest-sample drop in the battcal plugin — now an O(1) ring buffer), F5
+(a debounce counter not reset on all exits), F6 (a suggested `#shutoff`
+50 mV below the lowest voltage the bench actually reached — now at/above
+the validated minimum). All verified: unit tests green, simulator rebuild
++ battcal plugin re-run produced a byte-identical discharge curve. CI
+green on both hardware targets (`6ea4fe8`).
+
+**Round 2**, continuing the review deeper: F7 (a genuine null-pointer-
+dereference — `dircache_get_fileref_firstcluster()` called `get_entry()`
+unconditionally after a check that also accepts a volume-root reference
+(`idx < 0`), which `get_entry()` resolves to NULL; fixed to guard the
+sign explicitly, matching `get_path_sub()`'s existing branching. Only
+compile-checkable via CI — `dircache.c` isn't part of the simulator
+build.) and F8 (the battcal ring-buffer rotation was pure logic entangled
+with file I/O, so — like F2 — it had no direct test; extracted to
+`battcurve_ring_rotate()` and verified against a naive reference over 189
+(cap, total) combinations). CI green on both hardware targets (`486a242`).
+
+## Spec 0009 — iPod 6G/7G playback hang on format switch (rockpod#13/#17)
+
+User pointed at open rockpod issues describing files that sometimes
+don't play, not reproducible on stock Rockbox. Traced end-to-end in code
+(no hardware needed for the diagnosis): `apps/playback.c`'s auto-frequency
+switch correctly stops DMA via `mixer_reset()` when a track's sample rate
+differs from the current output, but `pcm_dma_apply_settings()`
+(`firmware/target/arm/s5l8702/pcm-s5l8702.c`) then calls
+`audiohw_set_frequency()` (`firmware/drivers/audio/cs42l55.c`) — which
+writes the CS42L55 codec's CLKCTL2 register — without honoring that
+function's own documented precondition ("disable output before calling
+this function"). The CS42L55 is the I2S clock master, so a live
+reprogram can glitch the SCLK/LRCK the SoC's I2S peripheral depends on as
+slave, wedging its DMA-completion callback permanently (explaining both
+silent audio and a frozen playback timer) rather than just clicking.
+Chip-specific to CS42L55 (6G/7G only) — iPod Video's WM8758 driver has
+the same "no mute" omission but isn't reported broken, and this whole
+audio path belongs to this fork, not upstream Rockbox.
+
+Fix: exposed `audiohw_mute()` (was `static`) via `cs42l55.h`, and
+bracketed the `audiohw_set_frequency()` call in `pcm_dma_apply_settings()`
+with mute(true)/mute(false). Minimal, scoped to the CS42L55/S5L8702
+pairing only — no change to the generic `audiohw.h` interface, `pcm.c`,
+`pcm_mixer.c`, or the 5G driver.
+
+This is direct hardware register-level code with no extractable pure
+logic — not host-unit-testable, and `pcm-s5l8702.c`/`cs42l55.c` are not
+part of the simulator build (same as the spec 0004 dircache precedent).
+CI hardware compile is the only automated verification available; **the
+actual fix needs on-device confirmation** — a playlist mixing lossless
+and lossy formats on a 6G/7G, skipped through repeatedly, should no
+longer hang. May also help rockpod#17 (hi-res files cross the same
+sample-rate boundary), but that issue's SSD-power-management hypothesis
+is a separate, still-unverified angle — not claimed as closed.

@@ -25,7 +25,7 @@ spec in `specs/` and, where the logic is host-testable, unit tests in
 
 ## 1. Bug fixes (from Rockpod issues)
 
-### 1.1 Hi-res FLAC intermittent playback failure — P0, effort M
+### 1.1 Hi-res FLAC intermittent playback failure — P0, effort M 🔧 *(likely helped, needs on-device confirmation)*
 
 - **Source:** [rockpod#17](https://github.com/nuxcodes/rockpod/issues/17)
 - **Area:** SSD power management, codec buffering
@@ -34,21 +34,36 @@ spec in `specs/` and, where the logic is host-testable, unit tests in
 96/176.4/192 kHz FLAC files fail intermittently (silent skip or no play) on
 an iPod Classic 7G with iFlash SSD, while the same files play fine on stock
 Rockbox 4.0. The reporter suspects Rockpod's two-phase sleep strategy and
-pre-wake on backlight racing the codec buffer on high-bitrate files. This
-fork inherits that power management code, so the bug almost certainly exists
-here too. Reproduce with hi-res FLAC on SSD, then audit the sleep/wake path
-against rebuffer timing. The intermittent, load-dependent nature points at a
-race — instrument first, then fix.
+pre-wake on backlight racing the codec buffer on high-bitrate files.
 
-### 1.2 Audio not playing when switching tracks (6G) — P0, effort M
+Traced (spec 0009, shared root cause with 1.2): hi-res files force a
+sample-rate change on entry/exit, hitting the same
+`pcm_dma_apply_settings()` hazard fixed for 1.2 below. That fix may reduce
+or resolve this too, but the reporter's SSD-sleep-timing hypothesis could
+still be a separate, unverified contributing factor — needs on-device
+confirmation, not claimed as closed.
+
+### 1.2 Audio not playing when switching tracks (6G) — P0, effort M ✅ **DONE** *(fix pushed, on-device confirmation pending)*
 
 - **Source:** [rockpod#13](https://github.com/nuxcodes/rockpod/issues/13)
 - **Area:** playback engine / codec handoff (`apps/playback.c`,
-  `apps/codec_thread.c`)
+  `apps/codec_thread.c`), root cause traced to
+  `firmware/target/arm/s5l8702/pcm-s5l8702.c` +
+  `firmware/drivers/audio/cs42l55.c`
 
-Track transitions occasionally produce silence on the iPod Classic 6G.
-Needs a reliable reproduction first; may share a root cause with 1.1
-(wake timing vs. rebuffer).
+Track transitions (specifically switching between formats at different
+sample rates, e.g. FLAC/ALAC ↔ Opus/MP3) hang playback entirely — no
+sound, frozen track timer — on 6.5G, not reproducible on 5G or stock
+Rockbox. Root cause (spec 0009): `audiohw_set_frequency()` writes the
+CS42L55 codec's CLKCTL2 register live, but its own doc comment requires
+output disabled first; the codec is the I2S clock master, so a live
+reprogram can glitch the SCLK/LRCK the SoC's I2S peripheral depends on as
+slave, wedging its DMA-completion callback permanently rather than just
+clicking. Fixed by muting around the frequency-change call in
+`pcm_dma_apply_settings()`. Hardware register-level code with no
+extractable pure logic — not host-unit-testable; CI hardware-compile is
+the only automated check. **Needs on-device confirmation** (play a mixed
+lossless/lossy playlist on 6G/7G, skip repeatedly, confirm no hang).
 
 ### 1.3 Dynamic colors: fix remaining glitches and harden — P1, effort M ✅ *(partially done)*
 

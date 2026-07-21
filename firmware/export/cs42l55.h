@@ -492,4 +492,9 @@ void audiohw_idle_powerup(void);
 #define HIDDEN3F                0x3f
 #define HIDDEN3F_DEFAULT        0x46
 
+/* Master-mute the codec.  Required before reprogramming CLKCTL2 (see
+ * audiohw_set_frequency()'s own precondition comment) -- exposed for
+ * pcm-s5l8702.c's pcm_dma_apply_settings() (specs/0009). */
+void audiohw_mute(bool mute);
+
 #endif /* __CS42L55_H__ */
