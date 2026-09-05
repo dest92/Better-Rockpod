@@ -83,6 +83,9 @@ int plugin_open(const char *plugin, const char *parameter);
 #include "metadata.h"
 #include "sound.h"
 #include "audio.h"
+#ifdef HAVE_HW_H264
+#include "hw_h264.h"
+#endif
 #include "voice_thread.h"
 #include "root_menu.h"
 #include "talk.h"
@@ -189,7 +192,8 @@ int plugin_open(const char *plugin, const char *parameter);
 /* 282: gui_synclist_init() gained a multiple_selection_force_single_entry_scroll
  * argument and playlist menus gained a choice getter (multiselection, spec
  * 0016); plugins built for 281 pass the wrong number of arguments. */
-#define PLUGIN_API_VERSION 282
+/* 283: hw_h264 decoder interface appended (upstream e0136bc7f). */
+#define PLUGIN_API_VERSION 283
 
 /* 239 Marks the removal of ARCHOS HWCODEC and CHARCELL */
 
@@ -1053,6 +1057,9 @@ struct plugin_api {
                         const struct custom_format *cformat);
 #endif
     struct add_to_pl_param* (*onplay_show_playlist_menu_get_choice)(void);
+#ifdef HAVE_HW_H264
+    const struct hw_h264_api *hw_h264;
+#endif
 };
 
 /* plugin header */

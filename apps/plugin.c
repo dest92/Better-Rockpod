@@ -50,6 +50,10 @@
 #include "language.h"
 #include "statusbar-skinned.h"
 #include "skin_engine/skin_albumart_color.h"
+#include "panic.h"
+#ifdef HAVE_HW_H264
+#include "hw_h264.h"
+#endif
 
 #if CONFIG_CHARGING
 #include "power.h"
@@ -885,6 +889,9 @@ static const struct plugin_api rockbox_api = {
     clip_jpeg_fd,
 #endif
     onplay_show_playlist_menu_get_choice,
+#ifdef HAVE_HW_H264
+    &target_hw_h264_api,
+#endif
 };
 
 static int plugin_buffer_handle;
