@@ -15,9 +15,6 @@
  * of the License, or (at your option) any later version.
  ****************************************************************************/
 #include "plugin.h"
-
-#ifdef HAVE_HW_H264
-
 #include <stddef.h>
 
 #include "codec_thread.h"
@@ -559,5 +556,3 @@ bool video_audio_failed(void)
 {
     return audio_has_error;
 }
-
-#endif /* HAVE_HW_H264 */

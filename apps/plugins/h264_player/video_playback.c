@@ -14,9 +14,6 @@
  * of the License, or (at your option) any later version.
  ****************************************************************************/
 #include "plugin.h"
-
-#ifdef HAVE_HW_H264
-
 #include "backlight.h"
 #include "button.h"
 #include "crc32.h"
@@ -38,7 +35,6 @@
 #include "video_audio.h"
 #include "video_pcm.h"
 #include "video_playback.h"
-#include "hw_h264.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -1128,5 +1124,3 @@ cleanup:
         rb->cpu_boost(false);
     return result;
 }
-
-#endif /* HAVE_HW_H264 */

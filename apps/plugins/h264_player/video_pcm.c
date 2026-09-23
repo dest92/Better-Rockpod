@@ -15,9 +15,6 @@
  * of the License, or (at your option) any later version.
  ****************************************************************************/
 #include "plugin.h"
-
-#ifdef HAVE_HW_H264
-
 #include "system.h"
 #include "kernel.h"
 #include "pcm.h"
@@ -246,5 +243,3 @@ uint32_t video_pcm_buffered_samples(void)
 {
     return pcm_used();
 }
-
-#endif /* HAVE_HW_H264 */
