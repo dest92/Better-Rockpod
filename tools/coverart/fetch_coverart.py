@@ -165,15 +165,37 @@ def scan_library(root, on_progress=None):
     return group_tracks_into_albums(track_infos)
 
 
+RETRY_STATUS_CODES = (403, 429, 500, 502, 503, 504)
+
+
+def get_with_retry(url, timeout, retries=3, get=None, sleep=time.sleep):
+    """GET `url`, retrying with exponential backoff (2s, 4s, 8s, ...).
+
+    The iTunes Search API answers intermittent 403/429 when it rate
+    limits a client, so those (and 5xx) are retried; other statuses are
+    returned immediately. Returns the last response either way.
+    """
+    if get is None:
+        get = requests.get
+    delay = 2
+    for attempt in range(retries + 1):
+        resp = get(url, timeout=timeout)
+        if resp.status_code not in RETRY_STATUS_CODES or attempt == retries:
+            return resp
+        sleep(delay)
+        delay *= 2
+    return resp
+
+
 def fetch_itunes_json(artist, album):
     url = build_itunes_search_url(artist, album)
-    resp = requests.get(url, timeout=10)
+    resp = get_with_retry(url, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
 
 def download_image(url):
-    resp = requests.get(url, timeout=15)
+    resp = get_with_retry(url, timeout=15)
     resp.raise_for_status()
     return resp.content
 

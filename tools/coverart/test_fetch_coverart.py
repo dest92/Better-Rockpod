@@ -16,6 +16,7 @@ from fetch_coverart import (
     album_needs_art,
     build_itunes_search_url,
     folder_has_cover_file,
+    get_with_retry,
     group_tracks_into_albums,
     pick_itunes_artwork,
     scan_library,
@@ -175,6 +176,59 @@ class ScanLibraryProgressTest(unittest.TestCase):
             open(os.path.join(d, "01.mp3"), "wb").close()
             albums = scan_library(d)
             self.assertEqual(len(albums), 1)
+
+
+class FakeResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError("HTTP %d" % self.status_code)
+
+
+class GetWithRetryTest(unittest.TestCase):
+    def run_with(self, codes, retries=3):
+        calls, sleeps = [], []
+        codes = list(codes)
+
+        def fake_get(url, timeout):
+            calls.append(url)
+            return FakeResponse(codes.pop(0))
+
+        resp = get_with_retry("http://x", 5, retries=retries,
+                              get=fake_get, sleep=sleeps.append)
+        return resp, calls, sleeps
+
+    def test_success_first_try_no_sleep(self):
+        resp, calls, sleeps = self.run_with([200])
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(sleeps, [])
+
+    def test_retries_rate_limit_then_succeeds(self):
+        # iTunes answers intermittent 403/429 when rate limiting.
+        resp, calls, sleeps = self.run_with([403, 429, 200])
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(sleeps, [2, 4])
+
+    def test_retries_server_error(self):
+        resp, calls, _ = self.run_with([503, 200])
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(calls), 2)
+
+    def test_gives_up_after_retries(self):
+        resp, calls, sleeps = self.run_with([403] * 4, retries=3)
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(sleeps, [2, 4, 8])
+
+    def test_no_retry_on_404(self):
+        resp, calls, sleeps = self.run_with([404])
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(sleeps, [])
 
 
 if __name__ == "__main__":

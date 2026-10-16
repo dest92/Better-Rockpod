@@ -120,15 +120,14 @@ already used ad-hoc during spec 0001's verification) and `requests`.
   directly against real files for all four formats (MP3/M4A/FLAC/Ogg) -
   the embedded bytes round-trip exactly and `has_embedded_art()` flips
   false→true.
-- **Network path:** this sandbox's outbound proxy blocks `itunes.apple.com`
-  by organization egress policy (confirmed via the proxy status endpoint,
-  not a bug in the tool) - the real HTTP call to the iTunes Search API
-  could not be exercised live here. Verified the full `--apply` pipeline
-  instead with `fetch_itunes_json`/`download_image` monkey-patched to
-  return iTunes-shaped canned data, confirming: the 100x100→600x600 URL
-  upsizing is actually used end-to-end, every track in a 3-track album
-  gets the artwork embedded, and a 0-result album is reported as
-  "not found" without stopping the scan (A4). **The user should do one
-  live run against a real album on their own machine** to confirm the
-  actual iTunes HTTP call and JSON shape haven't drifted from what's
-  assumed here.
+- **Network path (live, 2026-10-16):** real runs against the iTunes
+  Search API with ffmpeg-generated MP3s ("Radiohead - OK Computer",
+  "Kid A"). Dry run, then `--apply`: the 600x600 JPEG (~100 KB) was
+  embedded as APIC, and a re-run skipped the album (A5). The JSON
+  shape matches what the code expects.
+- **Fix found by the live run:** iTunes answered an intermittent HTTP
+  403 (rate limiting), which reported the album as an error. Added
+  `get_with_retry()`: exponential backoff 2/4/8s on 403/429/5xx, no
+  retry on other statuses. Used by `fetch_itunes_json` and
+  `download_image`. Covered by `GetWithRetryTest` (29 tests total, all
+  pass).
