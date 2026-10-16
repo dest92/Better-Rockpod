@@ -106,16 +106,14 @@ plugin API, and PictureFlow's tagcache-RAM path
   decoder limitation with flat/solid-color JPEGs, not a bug in this
   feature. Switching test fixtures to gradient images decoded
   correctly and matched expectations.
-- **Hardware builds (A5):** NOT verified — this environment has no
-  `arm-elf-eabi` cross-compiler and cannot build one (no network
-  access for `tools/rockboxdev.sh` source fetches, and substituting a
-  generic `arm-none-eabi-gcc` showed compiler-macro mismatches
-  (`ARM_PROFILE`/`ARM_ARCH` undefined) indicating it isn't a safe
-  stand-in for Rockbox's patched toolchain). The plugin API change is
-  a 2-line, `#ifdef HAVE_JPEG`-gated addition following the exact
-  existing pattern of `read_jpeg_fd`/`read_jpeg_file` in the same
-  struct/table, and the rest of the diff is target-independent C. Run
-  `./build-hw.sh` and `./build-hw.sh 5g` to confirm before shipping.
+- **Hardware builds (A5):** verified 2026-10-16 with the Rockbox
+  `arm-elf-eabi` toolchain (gcc 9.5.0, built via
+  `tools/rockboxdev.sh --target=a`). Clean `ipod6g` and `ipodvideo`
+  normal builds plus `make zip` succeed with no errors;
+  `pictureflow.rock` is in both zips. The only warnings are
+  pre-existing and unrelated to this change (`iap-lingo0.c`
+  sign-compare, `root_menu.c` unused `rec`, unused params in
+  `pf_tcs_retrieve_track_title`).
 - **Unrelated fix required to build at all:** `apps/gui/list.c`
   referenced a `callback_draw_margin` struct field that was never
   declared (introduced by an unrelated earlier commit), which broke
