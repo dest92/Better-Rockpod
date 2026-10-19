@@ -38,13 +38,13 @@ Rockbox requires out-of-tree builds. Cross-compiler toolchains are built via `to
 ./build-hw.sh ipodvideo      # explicit target name
 
 # Incremental rebuild
-cd build-hw-ipod6g && make -j$(sysctl -n hw.ncpu) && make zip
-cd build-hw-ipodvideo && make -j$(sysctl -n hw.ncpu) && make zip
+cd build-hw-ipod6g && make -j$(nproc || sysctl -n hw.ncpu) && make zip
+cd build-hw-ipodvideo && make -j$(nproc || sysctl -n hw.ncpu) && make zip
 
 # Simulator build (6G)
 ./build-sim.sh               # configure if needed + make + make install
 # Or incrementally:
-cd build-sim && make -j$(sysctl -n hw.ncpu)
+cd build-sim && make -j$(nproc || sysctl -n hw.ncpu)
 cd build-sim && ./rockboxui  # run simulator (uses simdisk/ as virtual FS)
 
 # Non-interactive configure (reference)

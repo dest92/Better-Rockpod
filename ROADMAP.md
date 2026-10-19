@@ -106,7 +106,7 @@ Plan of attack:
    (WCAG-style) ratio. Pure math → ideal unit-test target with
    golden values per input color.
 
-### 1.4 Build error from main — P1, effort S
+### 1.4 Build error from main — P1, effort S ✅ **DONE**
 
 - **Source:** [rockpod#22](https://github.com/nuxcodes/rockpod/issues/22)
 - **Area:** build system
@@ -116,6 +116,11 @@ builds clean from a fresh clone with the documented toolchain
 (`./build-hw.sh`, `./build-hw.sh 5g`, `./build-sim.sh`); fix or document as
 needed. Cheap insurance for every other item on this list — and a natural
 companion to the CI work in 4.3.
+
+**Result:** fresh `./build-hw.sh 5g` and `./build-sim.sh` verified on Linux.
+The only failure was the scripts' `sysctl -n hw.ncpu` (macOS-only); they now
+use `nproc` with `sysctl` as fallback. Linux needs `texinfo libtool-bin flex
+bison` for `tools/rockboxdev.sh` and `libsdl2-dev` for the simulator.
 
 ### 1.5 Sony PHA-1A: detected but no USB audio — P2, effort M
 

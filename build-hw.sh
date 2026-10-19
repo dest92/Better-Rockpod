@@ -20,5 +20,5 @@ rm -rf "$BUILDDIR"
 mkdir "$BUILDDIR"
 cd "$BUILDDIR"
 ../tools/configure --target="$TARGET" --type=n
-make -j$(sysctl -n hw.ncpu)
+make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 make zip
