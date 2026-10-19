@@ -154,6 +154,8 @@ struct dircache_fileref
 void dircache_fileref_init(struct dircache_fileref *dcfrefp);
 ssize_t dircache_get_fileref_path(const struct dircache_fileref *dcfrefp,
                                   char *buf, size_t size);
+long dircache_get_fileref_firstcluster(
+                                  const struct dircache_fileref *dcfrefp);
 
 /* Bitflags for dircache_search() */
 enum dircache_search_flags

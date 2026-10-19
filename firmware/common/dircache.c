@@ -2658,6 +2658,47 @@ file_error:
 }
 
 /**
+ * Obtain the first cluster of the file referenced by dcfrefp.
+ *
+ * Cluster numbers are monotone in physical sector, so this doubles as a
+ * cheap disk-position key (used by disk-locality shuffle).
+ *
+ * returns: the first cluster (>= 0) on success
+ *          a negative value if there is no cache or the reference is stale
+ */
+long dircache_get_fileref_firstcluster(const struct dircache_fileref *dcfrefp)
+{
+    long rc;
+
+    if (!dcfrefp)
+        FILE_ERROR_RETURN(EFAULT, -1);
+
+    dircache_lock();
+
+    if (!dircache_runinfo.handle)
+        FILE_ERROR(EBADF, -2);
+
+    rc = check_file_serialnum(&dcfrefp->dcfile);
+    if (rc < 0)
+        FILE_ERROR(-rc, -3);
+
+    /* check_file_serialnum() also accepts idx < 0 (a volume-root
+     * reference, see get_path_sub()) -- a volume root has no cluster
+     * chain, so that is "no cluster info" for this accessor, not a
+     * stale/bad reference. get_entry() only resolves idx > 0 and
+     * returns NULL otherwise; guard explicitly instead of assuming a
+     * plain file index like dircache_get_fileref_path() does. */
+    if (dcfrefp->dcfile.idx <= 0)
+        FILE_ERROR(ENOENT, -4);
+
+    rc = get_entry(dcfrefp->dcfile.idx)->firstcluster;
+
+file_error:
+    dircache_unlock();
+    return rc;
+}
+
+/**
  * Test a path to various levels of rigor and optionally return dircache file
  * info for the given path.
  *

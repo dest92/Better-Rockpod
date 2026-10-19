@@ -31,6 +31,7 @@
 #include "buffering.h"
 #include "appevents.h"
 #include "skin_albumart_color.h"
+#include "aa_color_math.h"
 
 #define AA_FADE_DURATION  (HZ / 4)   /* 250ms */
 #define HISTOGRAM_BUCKETS 4096
@@ -73,7 +74,7 @@ static uint16_t histogram[HISTOGRAM_BUCKETS];
 
 static int compute_luminance(int r8, int g8, int b8)
 {
-    return (r8 * 77 + g8 * 150 + b8 * 29) >> 8;
+    return aa_luminance(r8, g8, b8);
 }
 
 static unsigned int lerp_color(unsigned int c1, unsigned int c2, int t)
@@ -314,45 +315,19 @@ static void extract_colors(const struct bitmap *bmp)
     }
     else
     {
-        /* Hard fallback: dark dominant -> white text, light -> black */
-        if (dom_lum < 128)
-        {
-            acc_r = 255; acc_g = 255; acc_b = 255;
-        }
-        else
-        {
-            acc_r = 0; acc_g = 0; acc_b = 0;
-        }
+        /* No bucket clears the contrast bar (monochrome/low-sat art):
+         * derive a complementary accent from the dominant color */
+        aa_derive_complement(dom_r, dom_g, dom_b, MIN_CONTRAST,
+                             &acc_r, &acc_g, &acc_b);
         accent = LCD_RGBPACK(acc_r, acc_g, acc_b);
     }
 
-    /* Readability enforcement: scale accent to hit target luminance
-     * while preserving hue (proportional channel scaling) */
-    int acc_lum = compute_luminance(acc_r, acc_g, acc_b);
-    int contrast = dom_lum > acc_lum ? dom_lum - acc_lum : acc_lum - dom_lum;
-    if (contrast < MIN_CONTRAST)
-    {
-        int target_lum;
-        if (dom_lum < 128)
-            target_lum = MIN(dom_lum + MIN_CONTRAST, 255);
-        else
-            target_lum = MAX(dom_lum - MIN_CONTRAST, 0);
-
-        if (acc_lum > 0)
-        {
-            int scale = (target_lum * 256) / acc_lum;
-            acc_r = MIN((acc_r * scale) >> 8, 255);
-            acc_g = MIN((acc_g * scale) >> 8, 255);
-            acc_b = MIN((acc_b * scale) >> 8, 255);
-        }
-        else
-        {
-            acc_r = target_lum;
-            acc_g = target_lum;
-            acc_b = target_lum;
-        }
-        accent = LCD_RGBPACK(acc_r, acc_g, acc_b);
-    }
+    /* Readability enforcement: adjust value (then saturation) in HSV
+     * space so the luminance target is reached without hue shift.
+     * Accents that already have enough contrast pass through as-is. */
+    aa_fix_contrast(acc_r, acc_g, acc_b, dom_r, dom_g, dom_b,
+                    MIN_CONTRAST, &acc_r, &acc_g, &acc_b);
+    accent = LCD_RGBPACK(acc_r, acc_g, acc_b);
 
     start_fade(accent, dominant, false);
 }

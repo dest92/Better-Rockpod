@@ -31,6 +31,7 @@
 #include "pcm_sampr.h"
 #include "pcm-target.h"
 #include "dma-s5l8702.h"
+#include "cs42l55.h"
 
 /* DMA configuration */
 
@@ -208,8 +209,19 @@ void pcm_dma_apply_settings(void)
 
     /* configure I2S clock ratio */
     I2SCLKDIV = MCLK_FREQ / hw_freq_sampr[fsel];
-    /* select CS42L55 sample rate */
+
+    /* CLKCTL2 (written by audiohw_set_frequency) selects the codec's
+     * internal PLL/filter speed mode; its own doc comment requires
+     * output to be disabled first (specs/0009). CS42L55 is the I2S
+     * clock master here, so a live reprogram can glitch the SCLK/LRCK
+     * the SoC's I2S peripheral depends on as slave, permanently
+     * wedging playback (dma_play_callback stops firing) rather than
+     * just clicking. DMA is already stopped at this point (caller:
+     * pcm_apply_settings() runs before pcm_play_dma_start_int()), so
+     * this only extends the already-occurring silence, not adds one. */
+    audiohw_mute(true);
     audiohw_set_frequency(fsel);
+    audiohw_mute(false);
 }
 
 void pcm_play_dma_init(void)
