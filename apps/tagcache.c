@@ -3665,7 +3665,10 @@ static void command_queue_sync_callback(void)
     mutex_lock(&command_queue_mutex);
 
     if ( (masterfd = open_master_fd(&myhdr, true)) < 0)
+    {
+        mutex_unlock(&command_queue_mutex);
         return;
+    }
 
     while (command_queue_ridx != command_queue_widx)
     {
@@ -3680,7 +3683,10 @@ static void command_queue_sync_callback(void)
 
                 /* Re-open the masterfd. */
                 if ( (masterfd = open_master_fd(&myhdr, true)) < 0)
+                {
+                    mutex_unlock(&command_queue_mutex);
                     return;
+                }
 
                 break;
             }
