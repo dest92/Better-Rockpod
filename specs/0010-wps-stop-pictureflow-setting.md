@@ -1,6 +1,6 @@
 # 0010: WPS stop only opens PictureFlow when "WPS select action" is Cover Flow
 
-- **Status:** Draft
+- **Status:** Implemented
 - **Branch/PR:** `master` (roadmap 3.1, port of rockpod#5 by Paul Sauro / Olsro)
 
 ## Problem
@@ -65,3 +65,22 @@ author in the commit.
 This is UI control flow inside `gui_wps_show()` with no extractable pure
 logic, so it has no host unit test (the same as other WPS action
 handling).
+
+## Verification results
+
+- **Simulator (ipod6g, headless Xvfb + xdotool, SDL dummy audio):**
+  played `Music/tone.mp3` from the file browser, then held PLAY for 2s
+  in the WPS.
+  - A1 (default setting): playback stopped and the screen went back to
+    the file browser (`Music/tone`), with no play icon in the status
+    bar.
+  - A2 (`wps select action: coverflow` in `config.cfg`): PictureFlow
+    launched (its "Please enable database" prompt, since the sim had no
+    database). Playback kept going, and dismissing it returned to the
+    WPS with the track still playing.
+- **Hardware builds (A3):** `ipod6g` and `ipodvideo` build and zip
+  cleanly with the `arm-elf-eabi` toolchain, with no warnings in
+  `wps.c`.
+- **On device:** long-press PLAY to stop, then hold PLAY to power off,
+  with the default setting. The player should shut down without
+  entering PictureFlow (the original rockpod#5 report).

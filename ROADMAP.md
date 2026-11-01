@@ -244,7 +244,7 @@ heavy reverse-engineering work.
 All four are by Olsro and unreviewed upstream; they can be cherry-picked or
 reimplemented here. Credit the original author in commit messages.
 
-### 3.1 PictureFlow/WPS return behavior — P1, effort S
+### 3.1 PictureFlow/WPS return behavior — P1, effort S ✅ **DONE** (spec 0010)
 
 - **Source:** [rockpod#5](https://github.com/nuxcodes/rockpod/pull/5)
 - **Area:** `apps/plugins/pictureflow/`, WPS action handling

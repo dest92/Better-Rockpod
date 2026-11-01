@@ -1049,9 +1049,10 @@ long gui_wps_show(void)
                 }
                 break;
 
-                /* iPod Classic 6G custom: open PictureFlow instead of stopping */
             case ACTION_WPS_STOP:
+                if (global_settings.wps_select_action == 2) /* coverflow */
                 {
+                    /* open PictureFlow instead of stopping */
                     theme_enabled = false;
                     gwps_leave_wps(false);
                     filetype_load_plugin("pictureflow", NULL);
@@ -1064,13 +1065,12 @@ long gui_wps_show(void)
                     }
                     restore = true;
                 }
+                else
+                {
+                    bookmark = true;
+                    exit = true;
+                }
                 break;
-#if 0 /* original stop behavior */
-            case ACTION_WPS_STOP:
-                bookmark = true;
-                exit = true;
-                break;
-#endif
 
             case ACTION_WPS_LIST_BOOKMARKS:
                 gwps_leave_wps(true);
