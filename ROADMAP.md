@@ -253,7 +253,7 @@ Don't return to PictureFlow from the WPS unless the WPS-select option is
 set accordingly. Small UX fix that complements this fork's existing WPS
 select action setting (v5.2).
 
-### 3.2 Playlist viewer display format — P1, effort S
+### 3.2 Playlist viewer display format — P1, effort S ✅ **DONE** (spec 0011)
 
 - **Source:** [rockpod#4](https://github.com/nuxcodes/rockpod/pull/4)
 - **Area:** `apps/playlist_viewer.c`

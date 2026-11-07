@@ -54,6 +54,7 @@
 #ifdef HAVE_TAGCACHE
 #include "tagcache.h"
 #endif
+#include "playlist_viewer_format.h"
 
 /* Maximum number of tracks we can have loaded at one time                   */
 #define MAX_PLAYLIST_ENTRIES 200
@@ -527,9 +528,12 @@ static void format_line(struct playlist_entry* track, char* str,
     char *skipped = "";
     if (track->attr & PLAYLIST_ATTR_SKIPPED)
         skipped = "(ERR) ";
-    if (!(track->attr & PLAYLIST_ATTR_RETRIEVE_ID3_ATTEMPTED))
+    int track_display = global_settings.playlist_viewer_track_display;
+    bool from_tags = track_display == PLAYLIST_VIEWER_ENTRY_SHOW_ID3_TITLE ||
+        track_display == PLAYLIST_VIEWER_ENTRY_SHOW_ID3_TITLE_AND_ALBUM ||
+        track_display == PLAYLIST_VIEWER_ENTRY_SHOW_ID3_DISC_TRACK_TITLE_ALBUM;
+    if (from_tags && !(track->attr & PLAYLIST_ATTR_RETRIEVE_ID3_ATTEMPTED))
     {
-        /* iPod Classic 6G custom: always retrieve title from tags/db */
         track->attr |= PLAYLIST_ATTR_RETRIEVE_ID3_ATTEMPTED;
         bool retrieve_success = retrieve_id3_tags(track->index, track->name,
                                                   viewer.id3,
@@ -541,10 +545,14 @@ static void format_line(struct playlist_entry* track, char* str,
                 id3viewc = track->name + strlen(track->name) + 1;
             }
             struct mp3entry * pid3 = viewer.id3;
-            id3viewc[0] = '\0';
-            /* Title only (matching PictureFlow behavior) */
-            if (pid3->title && pid3->title[0] != '\0' &&
-                strmemccpy(id3viewc, pid3->title, MAX_PATH))
+            bool numbers = track_display ==
+                PLAYLIST_VIEWER_ENTRY_SHOW_ID3_DISC_TRACK_TITLE_ALBUM;
+            if (pv_format_tag_line(id3viewc, MAX_PATH,
+                    pid3->disc_string, pid3->discnum,
+                    pid3->track_string, pid3->tracknum,
+                    pid3->title, pid3->album, str(LANG_TAGNAVI_UNTAGGED),
+                    numbers, numbers || track_display ==
+                        PLAYLIST_VIEWER_ENTRY_SHOW_ID3_TITLE_AND_ALBUM))
             {
                 track->attr |= PLAYLIST_ATTR_RETRIEVE_ID3_SUCCEEDED;
             }
