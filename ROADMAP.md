@@ -27,6 +27,12 @@ spec in `specs/` and, where the logic is host-testable, unit tests in
 
 ### 1.1 Hi-res FLAC intermittent playback failure — P0, effort M 🔧 *(likely helped, needs on-device confirmation)*
 
+Update 2026-11-08: upstream FLAC robustness fixes were cherry-picked
+(`958e84c04`, `a81fd7b77`, `04ecb3c64`, `330236911`, `6a69ead1d`,
+`28b422502`; see `docs/upstream-sync.md`), alongside the spec 0009
+sample-rate-switch fix. What remains is the on-device test with 96-192
+kHz FLAC on an SSD 7G.
+
 - **Source:** [rockpod#17](https://github.com/nuxcodes/rockpod/issues/17)
 - **Area:** SSD power management, codec buffering
   (`firmware/target/arm/s5l8702/`, `apps/buffering.c`)
@@ -122,7 +128,19 @@ The only failure was the scripts' `sysctl -n hw.ncpu` (macOS-only); they now
 use `nproc` with `sysctl` as fallback. Linux needs `texinfo libtool-bin flex
 bison` for `tools/rockboxdev.sh` and `libsdl2-dev` for the simulator.
 
-### 1.5 Sony PHA-1A: detected but no USB audio — P2, effort M
+### 1.5 Sony PHA-1A: detected but no USB audio — P2, effort M 🔎 **Investigated, needs reporter logs**
+
+Checked against the upstream Rockbox USB-iAP fixes made since the fork.
+- Unmasked identify options (`c9bc89e35`, "detected but authentication
+  never starts, so no audio"): this tree already masks with `& 0x03`
+  (`apps/iap/iap-lingo0.c`).
+- 44.1 kHz cadence wrap (`3bd18f5a4`): `usb_audio.c` uses a fractional
+  accumulator without the `uint8_t` wrap.
+- IDPS option comparison: `idps_options` is stored but never compared
+  against the authentication values.
+None of the known causes apply, so the next step is a debug log from
+the reporter's PHA-1A session.
+
 
 - **Source:** [rockpod#24](https://github.com/nuxcodes/rockpod/issues/24)
 - **Area:** MFi/iAP digital audio (`firmware/target/arm/s5l8702/` USB stack,
@@ -205,7 +223,7 @@ Shuffle album order while preserving track order within each album. Pairs
 naturally with 2.1: albums are the natural disk-locality unit on most
 libraries.
 
-### 2.4 Power management & storage mode on iPod Video 5G — P1, effort L
+### 2.4 Power management & storage mode on iPod Video 5G — P1, effort L 🔧 **Storage Mode ported** (spec 0018); PP5022 power strategies need 5G hardware
 
 - **Source:** [rockpod#23](https://github.com/nuxcodes/rockpod/issues/23)
 - **Area:** `firmware/target/arm/pp/` (PP5022)

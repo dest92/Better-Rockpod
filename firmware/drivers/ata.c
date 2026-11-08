@@ -99,6 +99,9 @@ static bool ata_led_on = false;
 
 static long sleep_timeout = 5*HZ;
 
+static int storage_mode;   /* 0=auto, 1=HDD, 2=SSD */
+static bool ata_ssd_mode;
+
 static long last_disk_activity = -1;
 #ifdef HAVE_ATA_POWER_OFF
 static long power_off_tick = 0;
@@ -666,14 +669,26 @@ void ata_spindown(int seconds)
     sleep_timeout = seconds * HZ;
 }
 
+/* Resolve the Storage Mode setting against the drive's IDENTIFY data. */
+static void ata_update_ssd_mode(void)
+{
+    if (storage_mode == 2)
+        ata_ssd_mode = true;
+    else if (storage_mode == 1)
+        ata_ssd_mode = false;
+    else
+        ata_ssd_mode = ata_disk_isssd();
+}
+
 void ata_set_storage_mode(int mode)
 {
-    (void)mode;
+    storage_mode = mode;
+    ata_update_ssd_mode();
 }
 
 bool ata_get_ssd_mode(void)
 {
-    return false;
+    return ata_ssd_mode;
 }
 
 bool ata_disk_is_active(void)
@@ -1137,6 +1152,8 @@ int STORAGE_INIT_ATTR ata_init(void)
             rc = -40 + rc;
             goto error;
         }
+
+        ata_update_ssd_mode();
 
         multisectors = identify_info[47] & 0xff;
         if (!multisectors && (identify_info[59] & 0x100) == 0x100)
