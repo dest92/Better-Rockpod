@@ -186,7 +186,10 @@ int plugin_open(const char *plugin, const char *parameter);
  * silently misread every action from ACTION_TREE_ROOT_INIT onward --
  * wrong keymaps in every plugin, with no diagnostic, for anyone who
  * updated rockbox.ipod without also updating .rockbox/rocks/. */
-#define PLUGIN_API_VERSION 281
+/* 282: gui_synclist_init() gained a multiple_selection_force_single_entry_scroll
+ * argument and playlist menus gained a choice getter (multiselection, spec
+ * 0016); plugins built for 281 pass the wrong number of arguments. */
+#define PLUGIN_API_VERSION 282
 
 /* 239 Marks the removal of ARCHOS HWCODEC and CHARCELL */
 
@@ -403,7 +406,8 @@ struct plugin_api {
     void (*gui_synclist_init)(struct gui_synclist * lists,
             list_get_name callback_get_item_name, void * data,
             bool scroll_all,int selected_size,
-            struct viewport parent[NB_SCREENS]);
+            struct viewport parent[NB_SCREENS],
+            bool multiple_selection_force_single_entry_scroll);
     void (*gui_synclist_set_nb_items)(struct gui_synclist * lists, int nb_items);
     void (*gui_synclist_set_voice_callback)(struct gui_synclist * lists, list_speak_item voice_callback);
     void (*gui_synclist_set_icon_callback)(struct gui_synclist * lists,
@@ -876,7 +880,7 @@ struct plugin_api {
             const char *filename, int position, bool queue, bool sync);
     int (*playlist_insert_directory)(struct playlist_info* playlist,
                               const char *dirname, int position, bool queue,
-                              bool recurse, struct playlist_insert_context *context);
+                              bool recurse, struct playlist_insert_context* context_to_use);
     int (*playlist_insert_playlist)(struct playlist_info* playlist,
                                     const char *filename, int position, bool queue);
     int (*playlist_insert_context_create)(struct playlist_info* playlist,
@@ -1048,6 +1052,7 @@ struct plugin_api {
                         struct bitmap *bm, int maxsize, int format,
                         const struct custom_format *cformat);
 #endif
+    struct add_to_pl_param* (*onplay_show_playlist_menu_get_choice)(void);
 };
 
 /* plugin header */

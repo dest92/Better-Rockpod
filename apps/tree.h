@@ -103,6 +103,10 @@ struct tree_context {
     bool is_browsing; /* valid browse context? */
 
     struct browse_context *browse;
+
+    bool multiselection_enabled;
+    int multiselection_offset_item;
+    int multiselection_selected_size;
 };
 
 /*

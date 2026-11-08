@@ -884,6 +884,7 @@ static const struct plugin_api rockbox_api = {
 #ifdef HAVE_JPEG
     clip_jpeg_fd,
 #endif
+    onplay_show_playlist_menu_get_choice,
 };
 
 static int plugin_buffer_handle;

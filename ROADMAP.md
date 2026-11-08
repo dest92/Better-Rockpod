@@ -269,7 +269,7 @@ of filename.
 A button that lists/queues every track across all albums of the current
 tagtree view.
 
-### 3.4 Multiselect operations in browsers — P2, effort M
+### 3.4 Multiselect operations in browsers — P2, effort M ✅ **DONE** (spec 0016)
 
 - **Source:** [rockpod#2](https://github.com/nuxcodes/rockpod/pull/2)
 - **Area:** file browser, tagtree, playlist viewer (7 files, has conflicts)
