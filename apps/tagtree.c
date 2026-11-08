@@ -60,6 +60,7 @@
 #include "plugin.h"
 #include "language.h"
 #include "playlist_catalog.h"
+#include "album_shuffle.h"
 
 #define str_or_empty(x) (x ? x : "(NULL)")
 
@@ -81,6 +82,7 @@ struct tagentry {
     int extraseek;
     int customaction;
     char* album_name;
+    uint32_t album_key;
 };
 
 static struct tagentry* tagtree_get_entry(struct tree_context *c, int id);
@@ -93,7 +95,13 @@ enum table {
     TABLE_ALLSUBENTRIES,
     TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS,
     TABLE_PLAYTRACK,
+    TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS,
 };
+
+#define IS_ALBUM_SORTED_TABLE(t) ((t) == TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS || \
+                                  (t) == TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS)
+
+static uint32_t album_shuffle_seed;
 
 static const struct id3_to_search_mapping {
     char   *string;
@@ -921,6 +929,9 @@ static int compare_with_albums(const void *p1, const void *p2)
 {
     struct tagentry *e1 = (struct tagentry *)p1;
     struct tagentry *e2 = (struct tagentry *)p2;
+    int key_res = album_shuffle_cmp(e1->album_key, e2->album_key);
+    if (key_res != 0)
+        return key_res;
     int sort_album_res = qsort_fn(
         e1->album_name == NULL ? "" : e1->album_name,
         e2->album_name == NULL ? "" : e2->album_name, MAX_PATH);
@@ -1616,7 +1627,7 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
 #endif
         , 0, 0, 0);
 
-    if (c->currtable == TABLE_ALLSUBENTRIES || c->currtable == TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS)
+    if (c->currtable == TABLE_ALLSUBENTRIES || IS_ALBUM_SORTED_TABLE(c->currtable))
     {
         tag = tag_title;
         level--;
@@ -1680,7 +1691,7 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
     fmt = NULL;
     for (i = 0; i < format_count; i++)
     {
-        if (c->currtable == TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS)
+        if (IS_ALBUM_SORTED_TABLE(c->currtable))
         {
             /* If it is sorted by albums, we need to use the proper view
             that includes the disc number etc so sorting will be correct for each albums.
@@ -1714,11 +1725,21 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
     if (tag != tag_title && tag != tag_filename)
     {
         bool show_album_sorted = (tag == tag_album);
-        int show_album_sorted_offset = (show_album_sorted ? 1 : 0);
+        int show_album_sorted_offset = (show_album_sorted ? 2 : 0);
         if (offset == 0 && show_album_sorted)
         {
             dptr->newtable = TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS;
             dptr->name = ID2P(LANG_TAGNAVI_ALL_TRACKS_SORTED_BY_ALBUM);
+            dptr->extraseek = 0;
+            dptr->customaction = ONPLAY_NO_CUSTOMACTION;
+            dptr++;
+            current_entry_count++;
+            c->special_entry_count++;
+        }
+        if (offset <= 1 && show_album_sorted)
+        {
+            dptr->newtable = TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS;
+            dptr->name = ID2P(LANG_TAGNAVI_ALL_TRACKS_RANDOM_ALBUM_ORDER);
             dptr->extraseek = 0;
             dptr->customaction = ONPLAY_NO_CUSTOMACTION;
             dptr++;
@@ -1748,7 +1769,7 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
 
         total_count += 2;
         if (show_album_sorted)
-            total_count++;
+            total_count += 2;
     }
 
     while (tagcache_get_next(&tcs, tcs_buf, tcs_bufsz))
@@ -1770,7 +1791,7 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
         /* Check the format */
         for (i = 0; i < format_count; i++)
         {
-            if (c->currtable == TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS)
+            if (IS_ALBUM_SORTED_TABLE(c->currtable))
             {
                 /* If it is sorted by albums, we need to use the proper view
                 that includes the disc number etc so sorting will be correct for each albums.
@@ -1918,10 +1939,16 @@ entry_skip_formatter:
             qsort_fn = sort_inverse ? strncasecmp_inv : strncasecmp;
 
         struct tagentry *entries = get_entries(c);
+        for (i = c->special_entry_count; i < current_entry_count; i++)
+        {
+            entries[i].album_key =
+                c->currtable == TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS ?
+                album_shuffle_key(entries[i].album_name, album_shuffle_seed) : 0;
+        }
         qsort(&entries[c->special_entry_count],
               current_entry_count - c->special_entry_count,
               sizeof(struct tagentry),
-              c->currtable == TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS ? compare_with_albums : compare
+              IS_ALBUM_SORTED_TABLE(c->currtable) ? compare_with_albums : compare
         );
     }
 
@@ -2065,6 +2092,7 @@ int tagtree_load(struct tree_context* c)
 
         case TABLE_ALLSUBENTRIES:
         case TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS:
+        case TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS:
         case TABLE_NAVIBROWSE:
             logf("navibrowse...");
 
@@ -2276,6 +2304,7 @@ int tagtree_enter(struct tree_context* c, bool is_visible)
         case TABLE_NAVIBROWSE:
         case TABLE_ALLSUBENTRIES:
         case TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS:
+        case TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS:
             if (newextra == TABLE_PLAYTRACK)
             {
                 adjust_selection = false;
@@ -2294,6 +2323,8 @@ int tagtree_enter(struct tree_context* c, bool is_visible)
                 break;
             }
 
+            if (newextra == TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS)
+                album_shuffle_seed = current_tick;
             c->currtable = newextra;
             csi->result_seek[c->currextra] = seek;
             if (c->currextra < csi->tagorder_count-1)
@@ -2586,7 +2617,7 @@ static bool goto_allsubentries(int newtable)
 {
     int i = 0;
     while (i < 2 && (newtable == TABLE_NAVIBROWSE || newtable == TABLE_ALLSUBENTRIES
-        || newtable == TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS))
+        || IS_ALBUM_SORTED_TABLE(newtable)))
     {
         tagtree_enter(tc, false);
         tagtree_load(tc);
@@ -2829,6 +2860,7 @@ char *tagtree_get_title(struct tree_context* c)
         case TABLE_NAVIBROWSE:
         case TABLE_ALLSUBENTRIES:
         case TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS:
+        case TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS:
             logf("%s (NAVI/ALLSUB) idx: %d %s", __func__,
                  c->currextra, current_title[c->currextra]);
             return current_title[c->currextra];
@@ -2852,6 +2884,7 @@ int tagtree_get_attr(struct tree_context* c)
 
         case TABLE_ALLSUBENTRIES:
         case TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS:
+        case TABLE_ALLSUBENTRIES_SORTED_RANDOMLY_BY_ALBUMS:
             attr = FILE_ATTR_AUDIO;
             break;
 

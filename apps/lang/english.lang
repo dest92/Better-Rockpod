@@ -17195,3 +17195,17 @@
     *: "CD and Track number and Title and Album from tags"
   </voice>
 </phrase>
+<phrase>
+  id: LANG_TAGNAVI_ALL_TRACKS_RANDOM_ALBUM_ORDER
+  desc: "[By album, random order]" entry in tag browser
+  user: core
+  <source>
+    *: "[By album, random order]"
+  </source>
+  <dest>
+    *: "[By album, random order]"
+  </dest>
+  <voice>
+    *: "By album, random order"
+  </voice>
+</phrase>

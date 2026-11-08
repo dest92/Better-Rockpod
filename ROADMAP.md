@@ -261,7 +261,7 @@ select action setting (v5.2).
 New option to show entries as disc + track number + title + album instead
 of filename.
 
-### 3.3 Tagtree: play all tracks of all albums — P2, effort S
+### 3.3 Tagtree: play all tracks of all albums — P2, effort S ✅ **DONE** (spec 0012)
 
 - **Source:** [rockpod#3](https://github.com/nuxcodes/rockpod/pull/3)
 - **Area:** `apps/tagtree.c`
