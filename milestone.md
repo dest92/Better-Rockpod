@@ -51,3 +51,41 @@ verification.
 
 See [progress.md](progress.md) for the detailed, chronological log of
 what was done and verified for each item above.
+
+---
+
+# Milestone 2: Roadmap completion (2026-11-08)
+
+- **Status:** Complete for everything that can be done without hardware ✅
+- **Branch:** `master`
+
+| Roadmap | Item | Result |
+|---|---|---|
+| — | Sync with rockpod v5.5+ (30 commits) | merged `127678abff` |
+| 1.3 | Dynamic colors: per-frame fade latch | spec 0015 |
+| 1.4 | Fresh build on Linux | `nproc` fix, verified |
+| 1.5 | PHA-1A USB audio | investigated; upstream causes ruled out; needs reporter logs |
+| 2.3 | Shuffle Albums | spec 0013 |
+| 2.4 | 5G Storage Mode | spec 0018 (PP5022 power strategies need a 5G) |
+| 2.5 | Cover-art fetcher: MusicBrainz/CAA, resize, `cover.jpg` | spec 0014 |
+| 2.6 | Hardware H.264 player (6G) | spec 0017, upstream port |
+| 3.1 | WPS stop → PictureFlow only with Cover Flow | spec 0010 |
+| 3.2 | Playlist viewer disc/track/title/album | spec 0011 |
+| 3.3 | `[By album, random order]` | spec 0012 |
+| 3.4 | Multiselection | spec 0016 |
+| 3.5 | Blurred backdrop / art-first browsing | spec 0019 (idea) |
+| 4.1 | Rockbox fork point | upstream `dd21a1d1d` |
+| 4.2 | Upstream fixes, batch 1 | 39 commits, `docs/upstream-sync.md` |
+
+Every implemented item has host unit tests where the logic allows,
+simulator verification, and clean `ipod6g` and `ipodvideo` builds, with
+CI green on GitHub.
+
+## On-device checks still owed (no hardware in this environment)
+
+- 6G/7G: format-switch hang (spec 0009), hi-res FLAC (1.1), drive
+  power-down after flush (upstream `94313491a`), H.264 playback (spec
+  0017), long-press PLAY then power-off (spec 0010).
+- 5G: Storage Mode auto-detection with flash and with HDD (spec 0018),
+  click-wheel recovery (upstream `437737913`).
+- Both: dynamic-colors fades look seamless (spec 0015).
