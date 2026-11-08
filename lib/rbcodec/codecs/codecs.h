@@ -80,7 +80,7 @@
  * when this happens please take the opportunity to sort in
  * any new functions "waiting" at the end of the list.
  */
-#define CODEC_API_VERSION 50
+#define CODEC_API_VERSION 51
 
 /* reasons for calling codec main entrypoint */
 enum codec_entry_call_reason {
@@ -224,6 +224,7 @@ struct codec_api {
 
     /* new stuff at the end, sort into place next time
        the API gets incompatible */
+    void (*panicf)(const char *msg, ...);
 };
 
 /* codec header */

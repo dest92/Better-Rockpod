@@ -190,8 +190,9 @@ int plugin_open(const char *plugin, const char *parameter);
 /* 282: gui_synclist_init() gained a multiple_selection_force_single_entry_scroll
  * argument and playlist menus gained a choice getter (multiselection, spec
  * 0016); plugins built for 281 pass the wrong number of arguments. */
-/* 283: hw_h264 decoder interface appended (upstream e0136bc7f). */
-#define PLUGIN_API_VERSION 283
+/* 283: hw_h264 decoder interface appended (upstream e0136bc7f).
+ * 284: panicf appended (upstream 9ac6edf75). */
+#define PLUGIN_API_VERSION 284
 
 /* 239 Marks the removal of ARCHOS HWCODEC and CHARCELL */
 
@@ -1058,6 +1059,7 @@ struct plugin_api {
 #ifdef HAVE_HW_H264
     const struct hw_h264_api *hw_h264;
 #endif
+    void (*panicf)(const char *msg, ...);
 };
 
 /* plugin header */

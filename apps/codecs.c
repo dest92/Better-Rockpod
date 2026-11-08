@@ -50,6 +50,7 @@
 #include "splash.h"
 #include "general.h"
 #include "rbpaths.h"
+#include "panic.h"
 
 #define LOGF_ENABLE
 #include "logf.h"
@@ -150,7 +151,7 @@ struct codec_api ci = {
 
     /* new stuff at the end, sort into place next time
        the API gets incompatible */
-
+    panicf,
 };
 
 void codec_get_full_path(char *path, const char *codec_root_fn)

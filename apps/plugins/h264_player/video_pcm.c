@@ -100,10 +100,6 @@ static void video_pcm_get_more(const void **start, size_t *size)
     }
 }
 
-static const struct mixer_play_cbs video_pcm_cbs = {
-    .get_more = video_pcm_get_more,
-};
-
 bool video_pcm_init(uint32_t sample_rate, void *buffer, size_t buffer_size)
 {
     if (sample_rate == 0 || buffer == NULL ||
@@ -136,7 +132,7 @@ bool video_pcm_init(uint32_t sample_rate, void *buffer, size_t buffer_size)
     /* Start playback with DMA callback */
     rb->mixer_channel_set_amplitude(PCM_MIXER_CHAN_PLAYBACK, MIX_AMP_UNITY);
     rb->mixer_channel_play_data(PCM_MIXER_CHAN_PLAYBACK,
-                            &video_pcm_cbs, NULL, 0);
+                            video_pcm_get_more, NULL, 0);
     return true;
 }
 
@@ -204,7 +200,7 @@ void video_pcm_flush(uint32_t base_ms, uint32_t sample_rate)
     /* Restart mixer with fresh callback */
     rb->mixer_channel_set_amplitude(PCM_MIXER_CHAN_PLAYBACK, MIX_AMP_UNITY);
     rb->mixer_channel_play_data(PCM_MIXER_CHAN_PLAYBACK,
-                            &video_pcm_cbs, NULL, 0);
+                            video_pcm_get_more, NULL, 0);
 
     flush_pending = false;
     rb->mutex_unlock(&write_mutex);

@@ -100,7 +100,7 @@ static uint32_t bs_ue(struct bs *b)
         b->error = 1;
         return 0;
     }
-    return (UINT32_C(1) << lz) - 1 + bs_un(b, lz);
+    return (1u << lz) - 1 + bs_un(b, lz);
 }
 
 static int bs_se(struct bs *b)

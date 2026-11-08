@@ -889,6 +889,7 @@ static const struct plugin_api rockbox_api = {
 #ifdef HAVE_HW_H264
     &target_hw_h264_api,
 #endif
+    panicf,
 };
 
 static int plugin_buffer_handle;
