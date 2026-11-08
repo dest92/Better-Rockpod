@@ -664,6 +664,7 @@ struct user_settings
     bool fade_on_stop; /* fade on pause/unpause/stop */
     bool playlist_shuffle;
     bool disk_shuffle;   /* disk-locality-aware shuffle on HDD */
+    bool album_shuffle;  /* shuffle album order, keep track order */
     bool warnon_erase_dynplaylist; /* warn when erasing dynamic playlist */
     bool keep_current_track_on_replace_playlist;
     bool show_shuffled_adding_options; /* whether to display options for adding shuffled tracks to dynamic playlist */

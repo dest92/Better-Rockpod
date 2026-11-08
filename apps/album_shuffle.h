@@ -50,4 +50,25 @@ static inline int album_shuffle_cmp(uint32_t a, uint32_t b)
     return (a > b) - (a < b);
 }
 
+/* Shuffles group order and keeps each group's tracks in order; starts[]
+ * has ngroups+1 entries, out[] receives the old position of each new one. */
+static inline void album_shuffle_order(const int *starts, int ngroups,
+                                       int *order, int *out,
+                                       int (*rnd)(void))
+{
+    for (int g = 0; g < ngroups; g++)
+        order[g] = g;
+    for (int g = ngroups - 1; g > 0; g--)
+    {
+        int j = rnd() % (g + 1);
+        int t = order[g];
+        order[g] = order[j];
+        order[j] = t;
+    }
+    int pos = 0;
+    for (int g = 0; g < ngroups; g++)
+        for (int k = starts[order[g]]; k < starts[order[g] + 1]; k++)
+            out[pos++] = k;
+}
+
 #endif /* ALBUM_SHUFFLE_H */

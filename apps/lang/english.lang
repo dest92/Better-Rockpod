@@ -17209,3 +17209,17 @@
     *: "By album, random order"
   </voice>
 </phrase>
+<phrase>
+  id: LANG_ALBUM_SHUFFLE
+  desc: in playback settings
+  user: core
+  <source>
+    *: "Shuffle Albums"
+  </source>
+  <dest>
+    *: "Shuffle Albums"
+  </dest>
+  <voice>
+    *: "Shuffle Albums"
+  </voice>
+</phrase>

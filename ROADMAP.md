@@ -196,7 +196,7 @@ back. Keep a small ring buffer of recently played track indices and bias the
 new permutation to push those toward the end. Pure logic — ideal first
 TDD candidate alongside 2.1.
 
-### 2.3 Album shuffle — P2, effort M
+### 2.3 Album shuffle — P2, effort M ✅ **DONE** (spec 0013)
 
 - **Source:** fork idea (long-requested upstream Rockbox feature)
 - **Area:** `apps/playlist.c`, settings

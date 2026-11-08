@@ -102,6 +102,7 @@
 /* pure shuffle helpers: locality ordering (spec 0004) and repeat
  * anti-repeat (spec 0005); used on all builds */
 #include "shuffle_locality.h"
+#include "album_shuffle.h"
 #include "misc.h"
 #include "pathfuncs.h"
 #include "button.h"
@@ -445,6 +446,9 @@ static int update_control_unlocked(struct playlist_info* playlist,
         break;
     case PLAYLIST_COMMAND_DISK_SHUFFLE:
         result = fdprintf(fd, "H:%d:%d\n", i1, i2);
+        break;
+    case PLAYLIST_COMMAND_ALBUM_SHUFFLE:
+        result = fdprintf(fd, "L:%d:%d\n", i1, i2);
         break;
     case PLAYLIST_COMMAND_UNSHUFFLE:
         result = fdprintf(fd, "U:%d\n", i1);
@@ -1612,6 +1616,101 @@ static inline bool disk_shuffle_requested(const struct playlist_info* playlist)
 }
 #endif /* HAVE_DISK_SHUFFLE */
 
+enum shuffle_mode {
+    SHUFFLE_MODE_PLAIN = 0,
+    SHUFFLE_MODE_DISK,
+    SHUFFLE_MODE_ALBUM,
+};
+
+static int sort_playlist_unlocked(struct playlist_info* playlist,
+                                  bool start_current, bool write);
+
+static int shuffle_mode_requested(const struct playlist_info* playlist)
+{
+    if (global_settings.album_shuffle)
+        return SHUFFLE_MODE_ALBUM;
+    return disk_shuffle_requested(playlist) ? SHUFFLE_MODE_DISK
+                                            : SHUFFLE_MODE_PLAIN;
+}
+
+static int album_shuffle_rand(void)
+{
+    return rand();
+}
+
+/*
+ * Shuffle the order of albums (runs of tracks sharing a directory in
+ * playlist order) and keep each album's tracks in order
+ * (specs/0013-album-shuffle.md).  Caller has seeded the RNG.  Returns
+ * false (playlist untouched) when memory is unavailable.
+ */
+static bool randomise_playlist_album_unlocked(struct playlist_info* playlist)
+{
+    static char path[MAX_PATH], prev_dir[MAX_PATH];
+    int n = playlist->amount;
+    if (n <= 1)
+        return false;
+
+    sort_playlist_unlocked(playlist, false, false);
+
+    size_t size = (n + 1) * sizeof(int) + 2 * n * sizeof(int)
+                + n * sizeof(unsigned long);
+#ifdef HAVE_DIRCACHE
+    if (playlist->dcfrefs_handle)
+        size += n * sizeof(struct dircache_fileref);
+#endif
+    int handle = core_alloc(size);
+    if (handle <= 0)
+        return false;
+
+    /* get_track_filename() can yield, so re-fetch the buflib pointer
+     * every iteration */
+    int ngroups = 0;
+    prev_dir[0] = '\0';
+    for (int i = 0; i < n; i++)
+    {
+        char *slash;
+        if (get_track_filename(playlist, i, path, sizeof(path)) != 0)
+            path[0] = '\0';
+        slash = strrchr(path, '/');
+        if (slash)
+            *slash = '\0';
+        int *starts = core_get_data(handle);
+        if (i == 0 || strcmp(path, prev_dir) != 0)
+        {
+            starts[ngroups++] = i;
+            strmemccpy(prev_dir, path, sizeof(prev_dir));
+        }
+    }
+
+    /* From here on nothing yields, so cached buflib pointers stay valid. */
+    int *starts = core_get_data(handle);
+    starts[ngroups] = n;
+    int *order = starts + n + 1;
+    int *out = order + n;
+    unsigned long *idx_tmp = (unsigned long *)(out + n);
+    album_shuffle_order(starts, ngroups, order, out, album_shuffle_rand);
+
+    for (int i = 0; i < n; i++)
+        idx_tmp[i] = playlist->indices[out[i]];
+    memcpy(playlist->indices, idx_tmp, n * sizeof(unsigned long));
+#ifdef HAVE_DIRCACHE
+    if (playlist->dcfrefs_handle)
+    {
+        struct dircache_fileref *dcfrefs =
+            core_get_data(playlist->dcfrefs_handle);
+        struct dircache_fileref *dcf_tmp =
+            (struct dircache_fileref *)(idx_tmp + n);
+        for (int i = 0; i < n; i++)
+            dcf_tmp[i] = dcfrefs[out[i]];
+        memcpy(dcfrefs, dcf_tmp, n * sizeof(struct dircache_fileref));
+    }
+#endif
+
+    core_free(handle);
+    return true;
+}
+
 /*
  * randomly rearrange the array of indices for the playlist.  If start_current
  * is true then update the index to the new index of the current playing track.
@@ -1620,11 +1719,12 @@ static inline bool disk_shuffle_requested(const struct playlist_info* playlist)
  */
 static int randomise_playlist_unlocked(struct playlist_info* playlist,
                                        unsigned int seed, bool start_current,
-                                       bool write, bool disk)
+                                       bool write, int mode)
 {
     int count;
     int candidate;
     bool disk_done = false;
+    bool album_done = false;
     unsigned long current = playlist->indices[playlist->index];
 
     /* seed 0 is used to identify sorted playlist for resume purposes */
@@ -1634,14 +1734,14 @@ static int randomise_playlist_unlocked(struct playlist_info* playlist,
     /* seed with the given seed */
     srand(seed);
 
+    if (mode == SHUFFLE_MODE_ALBUM)
+        album_done = randomise_playlist_album_unlocked(playlist);
 #ifdef HAVE_DISK_SHUFFLE
-    if (disk)
+    else if (mode == SHUFFLE_MODE_DISK)
         disk_done = randomise_playlist_disk_unlocked(playlist);
-#else
-    (void)disk;
 #endif
 
-    if (!disk_done)
+    if (!disk_done && !album_done)
     {
         /* randomise entire indices list */
         for(count = playlist->amount - 1; count >= 0; count--)
@@ -1676,6 +1776,7 @@ static int randomise_playlist_unlocked(struct playlist_info* playlist,
     if (write)
     {
         update_control_unlocked(playlist,
+            album_done ? PLAYLIST_COMMAND_ALBUM_SHUFFLE :
             disk_done ? PLAYLIST_COMMAND_DISK_SHUFFLE
                       : PLAYLIST_COMMAND_SHUFFLE,
             seed, playlist->first_index, NULL, NULL, NULL);
@@ -3070,7 +3171,7 @@ int playlist_next(int steps)
             unsigned long recent[SHUFFLE_ANTIREPEAT_MAX];
             unsigned int seed = current_tick;
             unsigned int best_seed = seed;
-            bool disk = disk_shuffle_requested(playlist);
+            int mode = shuffle_mode_requested(playlist);
 
             if (amount < 3 * recent_count)
                 recent_count = 0;   /* too small to avoid repeats */
@@ -3087,7 +3188,7 @@ int playlist_next(int steps)
                 {
                     sort_playlist_unlocked(playlist, false, false);
                     randomise_playlist_unlocked(playlist, seed + attempt,
-                                                false, false, disk);
+                                                false, false, mode);
                     int overlap = shuffle_repeat_overlap(playlist->indices,
                                             amount, recent, recent_count);
                     if (overlap < best_overlap)
@@ -3103,7 +3204,7 @@ int playlist_next(int steps)
             /* final shuffle with the winning seed is the recorded one */
             sort_playlist_unlocked(playlist, false, false);
             randomise_playlist_unlocked(playlist, best_seed, false, true,
-                                        disk);
+                                        mode);
             global_settings.playlist_shuffle = true;
 
             playlist->started = true;
@@ -3227,7 +3328,7 @@ int playlist_randomise(struct playlist_info* playlist, unsigned int seed,
     check_control(playlist);
 
     result = randomise_playlist_unlocked(playlist, seed, start_current, true,
-                                         disk_shuffle_requested(playlist));
+                                         shuffle_mode_requested(playlist));
     if (result != -1 && (audio_status() & AUDIO_STATUS_PLAY) &&
         playlist->started)
     {
@@ -3289,6 +3390,8 @@ static enum playlist_command pl_cmds_run(char cmd)
             return PLAYLIST_COMMAND_SHUFFLE;
         case 'H':
             return PLAYLIST_COMMAND_DISK_SHUFFLE;
+        case 'L':
+            return PLAYLIST_COMMAND_ALBUM_SHUFFLE;
         case 'U':
             return PLAYLIST_COMMAND_UNSHUFFLE;
         case 'R':
@@ -3537,6 +3640,7 @@ int playlist_resume(void)
                     }
                     case PLAYLIST_COMMAND_SHUFFLE:
                     case PLAYLIST_COMMAND_DISK_SHUFFLE:
+                    case PLAYLIST_COMMAND_ALBUM_SHUFFLE:
                     {
                         /* strp[0]=seed strp[1]=first_index */
                         int seed;
@@ -3557,9 +3661,12 @@ int playlist_resume(void)
                         seed = atoi(strp[0]);
                         playlist->first_index = atoi(strp[1]);
 
+                        int mode = current_command ==
+                            PLAYLIST_COMMAND_ALBUM_SHUFFLE ? SHUFFLE_MODE_ALBUM :
+                            current_command == PLAYLIST_COMMAND_DISK_SHUFFLE ?
+                            SHUFFLE_MODE_DISK : SHUFFLE_MODE_PLAIN;
                         if (randomise_playlist_unlocked(playlist, seed, false,
-                                false, current_command ==
-                                       PLAYLIST_COMMAND_DISK_SHUFFLE) < 0)
+                                false, mode) < 0)
                         {
                             result = -9;
                             goto out;
@@ -3832,7 +3939,7 @@ int playlist_shuffle(int random_seed, int start_index)
     }
 
     randomise_playlist_unlocked(playlist, random_seed, start_current, true,
-                                disk_shuffle_requested(playlist));
+                                shuffle_mode_requested(playlist));
 
     playlist_write_unlock(playlist);
     dc_thread_start(playlist, true);

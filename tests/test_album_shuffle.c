@@ -54,11 +54,75 @@ TEST(distribution)
     CHECK(high > 400 && high < 600);
 }
 
+static unsigned int lcg_state;
+static int lcg(void)
+{
+    lcg_state = lcg_state * 1103515245u + 12345u;
+    return (int)((lcg_state >> 16) & 0x7fff);
+}
+
+/* 2.3: groups of a sorted playlist; out[] maps new position -> old */
+TEST(order_keeps_groups_and_inner_order)
+{
+    int starts[] = { 0, 3, 4, 8, 10 };      /* 4 groups, n = 10 */
+    int order[4], out[10], seen[10] = {0};
+    for (unsigned int seed = 1; seed < 20; seed++)
+    {
+        lcg_state = seed;
+        album_shuffle_order(starts, 4, order, out, lcg);
+        memset(seen, 0, sizeof(seen));
+        for (int i = 0; i < 10; i++)
+        {
+            CHECK(out[i] >= 0 && out[i] < 10);
+            seen[out[i]]++;
+        }
+        for (int i = 0; i < 10; i++)
+            CHECK_EQ(seen[i], 1);
+        /* inside a group, positions stay consecutive and increasing */
+        int pos = 0;
+        for (int g = 0; g < 4; g++)
+        {
+            int grp = order[g];
+            for (int k = starts[grp]; k < starts[grp + 1]; k++)
+                CHECK_EQ(out[pos++], k);
+        }
+    }
+}
+
+TEST(order_varies_with_seed)
+{
+    int starts[] = { 0, 1, 2, 3, 4, 5, 6 };
+    int order[6], out[6], first_seen[6] = {0};
+    for (unsigned int seed = 1; seed < 200; seed++)
+    {
+        lcg_state = seed;
+        album_shuffle_order(starts, 6, order, out, lcg);
+        first_seen[out[0]]++;
+    }
+    for (int g = 0; g < 6; g++)
+        CHECK(first_seen[g] > 10);
+}
+
+TEST(order_single_and_empty)
+{
+    int starts1[] = { 0, 5 };
+    int order[1], out[5];
+    lcg_state = 3;
+    album_shuffle_order(starts1, 1, order, out, lcg);
+    for (int i = 0; i < 5; i++)
+        CHECK_EQ(out[i], i);
+    int starts0[] = { 0 };
+    album_shuffle_order(starts0, 0, order, out, lcg);
+}
+
 int main(void)
 {
     RUN_TEST(deterministic);
     RUN_TEST(seed_changes_order);
     RUN_TEST(cmp_sign_correct);
     RUN_TEST(distribution);
+    RUN_TEST(order_keeps_groups_and_inner_order);
+    RUN_TEST(order_varies_with_seed);
+    RUN_TEST(order_single_and_empty);
     return rbtest_report();
 }
