@@ -65,7 +65,7 @@ extractable pure logic — not host-unit-testable; CI hardware-compile is
 the only automated check. **Needs on-device confirmation** (play a mixed
 lossless/lossy playlist on 6G/7G, skip repeatedly, confirm no hang).
 
-### 1.3 Dynamic colors: fix remaining glitches and harden — P1, effort M ✅ *(partially done)*
+### 1.3 Dynamic colors: fix remaining glitches and harden — P1, effort M ✅ **DONE** (specs 0003, 0015; on-device visual check pending)
 
 - **Source:** fork idea (user-observed glitches)
 - **Area:** `apps/gui/skin_engine/skin_albumart_color.c` and its hooks in

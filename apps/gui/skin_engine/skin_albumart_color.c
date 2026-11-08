@@ -32,8 +32,10 @@
 #include "appevents.h"
 #include "skin_albumart_color.h"
 #include "aa_color_math.h"
+#include "aa_fade.h"
 
 #define AA_FADE_DURATION  (HZ / 4)   /* 250ms */
+#define FRAME_LATCH_MAX_AGE 2
 #define HISTOGRAM_BUCKETS 4096
 #define SAMPLE_STRIDE     4          /* sample every 4th pixel */
 #define MIN_CONTRAST      100        /* minimum luminance contrast 0-255 */
@@ -59,6 +61,7 @@ struct dynamic_colors_cache {
     unsigned int theme_lst;      /* saved selector text color */
     unsigned int theme_sep;      /* saved list separator color */
     long fade_start_tick;
+    long frame_tick;             /* tick latched at the start of a frame */
     long track_change_tick;      /* when TRACK_CHANGE fired */
     bool valid;                  /* have valid AA colors */
     bool fading;                 /* fade in progress */
@@ -87,21 +90,19 @@ static unsigned int lerp_color(unsigned int c1, unsigned int c2, int t)
     int g2 = RGB_UNPACK_GREEN(c2);
     int b2 = RGB_UNPACK_BLUE(c2);
 
-    int r = r1 + (((r2 - r1) * t) >> 8);
-    int g = g1 + (((g2 - g1) * t) >> 8);
-    int b = b1 + (((b2 - b1) * t) >> 8);
+    int r = aa_fade_lerp8(r1, r2, t);
+    int g = aa_fade_lerp8(g1, g2, t);
+    int b = aa_fade_lerp8(b1, b2, t);
 
     return LCD_RGBPACK(r, g, b);
 }
 
+/* All resolves within one frame see the same fade step. */
 static int fade_progress(void)
 {
-    long elapsed = current_tick - cache.fade_start_tick;
-    if (elapsed <= 0)
-        return 0;
-    if (elapsed >= AA_FADE_DURATION)
-        return 256;
-    return (int)((elapsed * 256) / AA_FADE_DURATION);
+    long now = aa_fade_pick_tick(cache.frame_tick, current_tick,
+                                 FRAME_LATCH_MAX_AGE);
+    return aa_fade_progress(now - cache.fade_start_tick, AA_FADE_DURATION);
 }
 
 static void start_fade(unsigned int new_accent, unsigned int new_dominant,
@@ -380,6 +381,8 @@ void dynamic_colors_save_theme(void)
 
 void dynamic_colors_check_extraction(int aa_slot)
 {
+    cache.frame_tick = current_tick;
+
     /* Remember valid AA slots from skin_render calls so list_draw
      * can trigger extraction with aa_slot = -1 (use last known) */
     static int last_aa_slot = -1;
