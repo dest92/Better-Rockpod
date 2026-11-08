@@ -296,7 +296,7 @@ Mass move/delete/add-next/add-to-playlist. The largest of the four; the PR
 already carries merge conflicts and the author flags untested voicing and
 touchscreen paths, so budget rework time.
 
-### 3.5 Art browser plugin / blurred-art skin (ideas only) — P2
+### 3.5 Art browser plugin / blurred-art skin (ideas only) — P2 ✅ **Ideas captured** (spec 0019, draft)
 
 - **Source:** [rockpod#18](https://github.com/nuxcodes/rockpod/pull/18)
   (closed, unmerged)
