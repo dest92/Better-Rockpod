@@ -139,7 +139,11 @@ static bool flac_init(FLACContext* fc, int first_frame_offset)
 
         if ((buf[0] & 0x7f) == 0)       /* 0 is the STREAMINFO block */
         {
-            if (ci->read_filebuf(buf, blocklength) < blocklength) return false;
+            /* only one, and it must fit in buf */
+            if (found_streaminfo || blocklength < 18 ||
+                blocklength > sizeof(buf) ||
+                ci->read_filebuf(buf, blocklength) < blocklength)
+                return false;
 
             fc->filesize = ci->filesize;
             fc->min_blocksize = (buf[0] << 8) | buf[1];
@@ -155,6 +159,8 @@ static bool flac_init(FLACContext* fc, int first_frame_offset)
             fc->max_framesize = (buf[7] << 16) | (buf[8] << 8) | buf[9];
             fc->samplerate = (buf[10] << 12) | (buf[11] << 4)
                              | ((buf[12] & 0xf0) >> 4);
+            if (fc->samplerate == 0)
+                return false;
             fc->channels = ((buf[12]&0x0e)>>1) + 1;
             fc->bps = (((buf[12]&0x01) << 4) | ((buf[13]&0xf0)>>4) ) + 1;
 
@@ -210,8 +216,9 @@ static bool flac_init(FLACContext* fc, int first_frame_offset)
     }
 
    if (found_streaminfo) {
-       fc->bitrate = ((int64_t) (fc->filesize-fc->metadatalength) * 8)
-                     / fc->length;
+       /* length is 0 when STREAMINFO has no total sample count */
+       fc->bitrate = fc->length ? ((int64_t) (fc->filesize-fc->metadatalength) * 8)
+                     / fc->length : 0;
        return true;
    } else {
        return false;
@@ -489,9 +496,7 @@ enum codec_status codec_run(void)
     ci->configure(DSP_SET_STEREO_MODE, fc.channels == 1 ?
                   STEREO_MONO : STEREO_NONINTERLEAVED);
     codec_set_replaygain(ci->id3);
-
-    if (samplesdone || !elapsedtime) {
-        flac_seek_offset(&fc, samplesdone);
+    if (samplesdone && flac_seek_offset(&fc, samplesdone)) {
         samplesdone=fc.samplenumber+fc.blocksize;
         elapsedtime=((uint64_t)samplesdone*1000)/(ci->id3->frequency);
     }

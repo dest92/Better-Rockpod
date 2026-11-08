@@ -291,7 +291,7 @@ future spec.
 
 ## 4. Upstream Rockbox sync
 
-### 4.1 Identify the exact fork point — P1, effort S
+### 4.1 Identify the exact fork point — P1, effort S ✅ **DONE** (upstream `dd21a1d1d`, see `docs/upstream-sync.md`)
 
 - **Source:** fork maintenance
 - **Area:** git history
@@ -303,7 +303,7 @@ fork point by diffing this tree against upstream Rockbox commits (e.g.
 bisecting on file checksums of untouched upstream files). Everything else
 in this section depends on knowing this.
 
-### 4.2 Cherry-pick post-fork upstream fixes — P2, effort ongoing
+### 4.2 Cherry-pick post-fork upstream fixes — P2, effort ongoing ✅ **Batch 1 DONE** (39 commits, `docs/upstream-sync.md`; ongoing)
 
 - **Source:** fork maintenance;
   [rockpod#19](https://github.com/nuxcodes/rockpod/issues/19)

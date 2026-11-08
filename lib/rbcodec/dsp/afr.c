@@ -138,7 +138,7 @@ static intptr_t afr_configure(struct dsp_proc_entry *this,
         break;
     }
 
-    return 1;
+    return 0;
 }
 
 /* Database entry */

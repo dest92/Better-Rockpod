@@ -325,6 +325,7 @@ static unsigned int track_event_flags = TEF_NONE; /* (A, O-) */
 static int skip_offset = 0; /* (A, O) */
 
 static bool track_skip_is_manual = false;
+static bool pause_on_track_change = false;
 
 /* Track change notification */
 static struct
@@ -1512,7 +1513,7 @@ static bool halt_decoding_track(bool stop)
 
     codec_skip_pending = false;
     codec_seeking = false;
-
+    pause_on_track_change = false;
     return retval;
 }
 
@@ -2744,10 +2745,14 @@ static void audio_finalise_track_change(void)
         buf_read_cuesheet(info.cuesheet_hid);
         track_id3 = bufgetid3(info.id3_hid);
 
-        if (single_mode_do_pause(info.id3_hid))
+        /* When pause_on_track_change is calculated, next track_info may be missing
+         * (due to a low buffer or an automatic directory change),
+         * so we need to recalculate it. */
+        if (pause_on_track_change || single_mode_do_pause(info.id3_hid))
         {
             play_status = PLAY_PAUSED;
             pcmbuf_pause(true);
+            pause_on_track_change = false;
         }
     }
     /* Sync the next track information */
@@ -2825,11 +2830,16 @@ static void audio_monitor_end_of_playlist(void)
 }
 
 /* Does this track have an entry allocated? */
-static bool audio_can_change_track(int *trackstat, int *id3_hid)
+static bool audio_can_change_track(int *trackstat, enum pcm_track_change_type *type)
 {
     struct track_info info;
     bool have_track = track_list_advance_current(1, &info);
-    *id3_hid = info.id3_hid;
+
+    pause_on_track_change = have_track && single_mode_do_pause(info.id3_hid);
+    *type = pause_on_track_change
+                ? TRACK_CHANGE_END_OF_DATA
+                : TRACK_CHANGE_AUTO;
+
     if (!have_track || info.audio_hid < 0)
     {
         bool end_of_playlist = false;
@@ -2838,8 +2848,8 @@ static bool audio_can_change_track(int *trackstat, int *id3_hid)
         {
             if (filling == STATE_STOPPED)
             {
-                audio_begin_track_change(TRACK_CHANGE_END_OF_DATA, *trackstat);
-                return false;
+                *type = TRACK_CHANGE_END_OF_DATA;
+                return true;
             }
 
             /* Track load is not complete - it might have stopped on a
@@ -2941,13 +2951,10 @@ static void audio_on_codec_complete(int status)
     track_event_flags = TEF_AUTO_SKIP;
     skip_pending = TRACK_SKIP_AUTO;
 
-    int id3_hid = 0;
-    if (audio_can_change_track(&trackstat, &id3_hid))
+    enum pcm_track_change_type type;
+    if (audio_can_change_track(&trackstat, &type))
     {
-        audio_begin_track_change(
-                single_mode_do_pause(id3_hid)
-                ? TRACK_CHANGE_END_OF_DATA
-                : TRACK_CHANGE_AUTO, trackstat);
+        audio_begin_track_change(type, trackstat);
     }
 }
 
@@ -3027,12 +3034,18 @@ static void audio_start_playback(const struct audio_resume_info *resume_info,
         track_event_flags = TEF_NONE;
         ff_rw_mode = false;
 
+        /*
+         * When restarting playback or resuming from a paused state,
+         * the PCM buffer should be cleared to ensure crossfade will
+         * not be performed.
+         */
+        if ((flags & AUDIO_START_RESTART) || old_status == PLAY_PAUSED)
+            pcmbuf_play_stop();
+
         if (flags & AUDIO_START_RESTART)
         {
             /* Clear out some stuff to resume the current track where it
                left off */
-            pcmbuf_play_stop();
-
             resume.elapsed = id3_get(PLAYING_ID3)->elapsed;
             resume.offset = id3_get(PLAYING_ID3)->offset;
             skip_resume_adjustments = id3_get(PLAYING_ID3)->skip_resume_adjustments;
@@ -3860,7 +3873,7 @@ void audio_pcmbuf_track_change(bool pcmbuf)
 /* May pcmbuf start PCM playback when the buffer is full enough? */
 bool audio_pcmbuf_may_play(void)
 {
-    return play_status == PLAY_PLAYING && !ff_rw_mode;
+    return play_status == PLAY_PLAYING && !ff_rw_mode && !pause_on_track_change;
 }
 
 

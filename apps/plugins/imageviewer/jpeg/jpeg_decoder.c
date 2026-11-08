@@ -534,11 +534,28 @@ int process_markers(unsigned char* p_src, long size, struct jpeg* p_jpeg)
                     p_jpeg->frameheader[i].horizontal_sampling = *p_src >> 4;
                     p_jpeg->frameheader[i].vertical_sampling = *p_src++ & 0x0F;
                     p_jpeg->frameheader[i].quanttable_select = *p_src++;
+                    if (p_jpeg->frameheader[i].quanttable_select > 3)
+                        return -8; /* Unsupported quantization table */
                     if (p_jpeg->frameheader[i].horizontal_sampling > 2
                      || p_jpeg->frameheader[i].vertical_sampling > 2)
                     return -3; /* Unsupported SOF0 subsampling */
                 }
                 p_jpeg->blocks = n;
+                for (i=1; i<n; i++)
+                {   /* chroma must be one block per MCU */
+                    if (p_jpeg->frameheader[i].horizontal_sampling != 1
+                     || p_jpeg->frameheader[i].vertical_sampling != 1)
+                        return -3; /* Unsupported SOF0 subsampling */
+                }
+                if (p_jpeg->x_size == 0 || p_jpeg->y_size == 0)
+                    return -12; /* Height defined by DNL not supported */
+                /* A single-component scan is non-interleaved: the MCU is one
+                   8x8 block regardless of the sampling factors (T.81 A.2.2) */
+                if (n == 1)
+                {
+                    p_jpeg->frameheader[0].horizontal_sampling = 1;
+                    p_jpeg->frameheader[0].vertical_sampling = 1;
+                }
             }
             break;
 
@@ -623,15 +640,27 @@ int process_markers(unsigned char* p_src, long size, struct jpeg* p_jpeg)
                 marker_size |= *p_src++; /* Lowbyte */
 
                 n = (marker_size-2-1-3)/2;
-                if (*p_src++ != n || (n != 1 && n != 3))
+                if (*p_src++ != n || (n != 1 && n != 3)
+                    /* one scan with all components; multi-scan files and
+                       SOS before SOF are not supported (blocks = Nf here) */
+                    || n != p_jpeg->blocks)
                 {
                     return (-7); /* Unsupported SOS component specification */
                 }
                 for (i=0; i<n; i++)
                 {
                     p_jpeg->scanheader[i].ID = *p_src++;
+                    if (p_jpeg->scanheader[i].ID != p_jpeg->frameheader[i].ID)
+                    {
+                        return (-7); /* components out of frame order */
+                    }
                     p_jpeg->scanheader[i].DC_select = *p_src >> 4;
                     p_jpeg->scanheader[i].AC_select = *p_src++ & 0x0F;
+                    if (p_jpeg->scanheader[i].DC_select > 1
+                     || p_jpeg->scanheader[i].AC_select > 1)
+                    {
+                        return (-5); /* Huffman table index out of range */
+                    }
                 }
                 p_src += 3; /* skip spectral information */
                 p_jpeg->p_entropy_data = p_src;
@@ -879,7 +908,7 @@ static const int zag[] =
 
 void build_lut(struct jpeg* p_jpeg)
 {
-    int i;
+    int i, c;
     fix_huff_tbl(p_jpeg->hufftable[0].huffmancodes_dc,
         &p_jpeg->dc_derived_tbls[0]);
     fix_huff_tbl(p_jpeg->hufftable[0].huffmancodes_ac,
@@ -889,11 +918,14 @@ void build_lut(struct jpeg* p_jpeg)
     fix_huff_tbl(p_jpeg->hufftable[1].huffmancodes_ac,
         &p_jpeg->ac_derived_tbls[1]);
 
-    /* build the dequantization tables for the IDCT (De-ZiZagged) */
-    for (i=0; i<64; i++)
+    /* build each component's dequantization table for the IDCT
+       (De-ZiZagged); p_jpeg->blocks is still the component count here */
+    for (c=0; c<p_jpeg->blocks; c++)
     {
-        p_jpeg->qt_idct[0][zag[i]] = p_jpeg->quanttable[0][i];
-        p_jpeg->qt_idct[1][zag[i]] = p_jpeg->quanttable[1][i];
+        const int* qt = p_jpeg->quanttable[
+            p_jpeg->frameheader[c].quanttable_select];
+        for (i=0; i<64; i++)
+            p_jpeg->qt_idct[c][zag[i]] = qt[i];
     }
 
     for (i=0; i<4; i++)
@@ -912,10 +944,6 @@ void build_lut(struct jpeg* p_jpeg)
         p_jpeg->mcu_membership[1] = 0;
         p_jpeg->mcu_membership[2] = 1;
         p_jpeg->mcu_membership[3] = 2;
-        p_jpeg->tab_membership[0] = 0; /* DC, DC, AC, AC */
-        p_jpeg->tab_membership[1] = 0;
-        p_jpeg->tab_membership[2] = 1;
-        p_jpeg->tab_membership[3] = 1;
         p_jpeg->subsample_x[0] = 1;
         p_jpeg->subsample_x[1] = 2;
         p_jpeg->subsample_x[2] = 2;
@@ -937,10 +965,6 @@ void build_lut(struct jpeg* p_jpeg)
         p_jpeg->mcu_membership[1] = 0;
         p_jpeg->mcu_membership[2] = 1;
         p_jpeg->mcu_membership[3] = 2;
-        p_jpeg->tab_membership[0] = 0; /* DC, DC, AC, AC */
-        p_jpeg->tab_membership[1] = 0;
-        p_jpeg->tab_membership[2] = 1;
-        p_jpeg->tab_membership[3] = 1;
         p_jpeg->subsample_x[0] = 1;
         p_jpeg->subsample_x[1] = 1;
         p_jpeg->subsample_x[2] = 1;
@@ -962,12 +986,6 @@ void build_lut(struct jpeg* p_jpeg)
         p_jpeg->mcu_membership[3] = 0;
         p_jpeg->mcu_membership[4] = 1;
         p_jpeg->mcu_membership[5] = 2;
-        p_jpeg->tab_membership[0] = 0;
-        p_jpeg->tab_membership[1] = 0;
-        p_jpeg->tab_membership[2] = 0;
-        p_jpeg->tab_membership[3] = 0;
-        p_jpeg->tab_membership[4] = 1;
-        p_jpeg->tab_membership[5] = 1;
         p_jpeg->subsample_x[0] = 1;
         p_jpeg->subsample_x[1] = 2;
         p_jpeg->subsample_x[2] = 2;
@@ -986,9 +1004,6 @@ void build_lut(struct jpeg* p_jpeg)
         p_jpeg->mcu_membership[0] = 0;
         p_jpeg->mcu_membership[1] = 1;
         p_jpeg->mcu_membership[2] = 2;
-        p_jpeg->tab_membership[0] = 0;
-        p_jpeg->tab_membership[1] = 1;
-        p_jpeg->tab_membership[2] = 1;
         p_jpeg->subsample_x[0] = 1;
         p_jpeg->subsample_x[1] = 1;
         p_jpeg->subsample_x[2] = 1;
@@ -1270,9 +1285,10 @@ int jpeg_decode(struct jpeg* p_jpeg, unsigned char* p_pixel[3],
                 int k = 1; /* coefficient index */
                 int s, r; /* huffman values */
                 int ci = p_jpeg->mcu_membership[blkn]; /* component index */
-                int ti = p_jpeg->tab_membership[blkn]; /* table index */
-                struct derived_tbl* dctbl = &p_jpeg->dc_derived_tbls[ti];
-                struct derived_tbl* actbl = &p_jpeg->ac_derived_tbls[ti];
+                struct derived_tbl* dctbl =
+                    &p_jpeg->dc_derived_tbls[p_jpeg->scanheader[ci].DC_select];
+                struct derived_tbl* actbl =
+                    &p_jpeg->ac_derived_tbls[p_jpeg->scanheader[ci].AC_select];
 
                 /* Section F.2.2.1: decode the DC coefficient difference */
                 s = huff_decode_dc(&bs, dctbl);
@@ -1331,11 +1347,11 @@ int jpeg_decode(struct jpeg* p_jpeg, unsigned char* p_pixel[3],
                 if (ci == 0)
                 {   /* Y component needs to bother about block store */
                     pf_idct(p_byte[0]+store_offs[blkn], block,
-                        p_jpeg->qt_idct[ti], skip_line[0]);
+                        p_jpeg->qt_idct[ci], skip_line[0]);
                 }
                 else
                 {   /* chroma */
-                    pf_idct(p_byte[ci], block, p_jpeg->qt_idct[ti],
+                    pf_idct(p_byte[ci], block, p_jpeg->qt_idct[ci],
                         skip_line[ci]);
                 }
             } /* for blkn */
@@ -1441,9 +1457,10 @@ int jpeg_decode(struct jpeg* p_jpeg, unsigned char* p_pixel[1], int downscale,
                 int k = 1; /* coefficient index */
                 int s, r; /* huffman values */
                 int ci = p_jpeg->mcu_membership[blkn]; /* component index */
-                int ti = p_jpeg->tab_membership[blkn]; /* table index */
-                struct derived_tbl* dctbl = &p_jpeg->dc_derived_tbls[ti];
-                struct derived_tbl* actbl = &p_jpeg->ac_derived_tbls[ti];
+                struct derived_tbl* dctbl =
+                    &p_jpeg->dc_derived_tbls[p_jpeg->scanheader[ci].DC_select];
+                struct derived_tbl* actbl =
+                    &p_jpeg->ac_derived_tbls[p_jpeg->scanheader[ci].AC_select];
 
                 /* Section F.2.2.1: decode the DC coefficient difference */
                 s = huff_decode_dc(&bs, dctbl);
@@ -1504,7 +1521,7 @@ int jpeg_decode(struct jpeg* p_jpeg, unsigned char* p_pixel[1], int downscale,
 
                 if (ci == 0)
                 {   /* only for Y component */
-                    pf_idct(p_byte+store_offs[blkn], block, p_jpeg->qt_idct[ti],
+                    pf_idct(p_byte+store_offs[blkn], block, p_jpeg->qt_idct[ci],
                         skip_line);
                 }
             } /* for blkn */
