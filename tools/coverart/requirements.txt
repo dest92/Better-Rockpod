@@ -1,2 +1,4 @@
 mutagen>=1.45
 requests>=2.25
+# Optional, only needed for --max-size:
+Pillow>=9.0

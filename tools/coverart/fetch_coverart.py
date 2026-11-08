@@ -39,6 +39,15 @@ COVER_FILE_EXTS = (".jpg", ".jpeg", ".png")
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 ITUNES_RATE_LIMIT_SECONDS = 1.0
 
+MUSICBRAINZ_SEARCH_URL = "https://musicbrainz.org/ws/2/release-group/"
+MUSICBRAINZ_MIN_SCORE = 90
+MUSICBRAINZ_RATE_LIMIT_SECONDS = 1.0
+CAA_SIZE = 500
+HTTP_HEADERS = {
+    "User-Agent": "Better-Rockpod-coverart/1.1 "
+                  "(https://github.com/dest92/Better-Rockpod)"
+}
+
 
 # ---------------------------------------------------------------------------
 # Pure decision logic (unit-tested in test_fetch_coverart.py, no I/O/network)
@@ -53,6 +62,65 @@ def build_itunes_search_url(artist, album):
 def upsize_itunes_artwork_url(url):
     """Upsize iTunes' default 100x100 (or similar) artwork URL to 600x600."""
     return re.sub(r"\d+x\d+bb\.", "600x600bb.", url)
+
+
+def _lucene_quote(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def build_musicbrainz_search_url(artist, album):
+    query = (f"releasegroup:{_lucene_quote(album)} "
+             f"AND artist:{_lucene_quote(artist)}")
+    params = urllib.parse.urlencode({"query": query, "fmt": "json",
+                                     "limit": 5})
+    return f"{MUSICBRAINZ_SEARCH_URL}?{params}"
+
+
+def pick_musicbrainz_release_group(mb_json):
+    """Return the best-scoring release-group MBID, or None if no result
+    scores at least MUSICBRAINZ_MIN_SCORE."""
+    best = None
+    for group in mb_json.get("release-groups") or []:
+        if not group.get("id"):
+            continue
+        score = int(group.get("score", 0))
+        if score >= MUSICBRAINZ_MIN_SCORE and (best is None or score > best[0]):
+            best = (score, group["id"])
+    return best[1] if best else None
+
+
+def caa_front_url(mbid, size=CAA_SIZE):
+    return f"https://coverartarchive.org/release-group/{mbid}/front-{size}"
+
+
+def fit_size(width, height, max_size):
+    """Scale (width, height) so the longest side is at most max_size,
+    keeping aspect ratio and never upscaling."""
+    longest = max(width, height)
+    if longest <= max_size:
+        return width, height
+    scale = max_size / longest
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
+def prepare_image(image_bytes, max_size):
+    """Optionally downscale and re-encode as baseline JPEG, which the
+    Rockbox JPEG decoder handles (it cannot decode progressive JPEG).
+    Returns (bytes, mime). Without max_size the bytes pass through."""
+    if not max_size:
+        mime = "image/png" if image_bytes[:8] == b"\x89PNG\r\n\x1a\n" \
+            else "image/jpeg"
+        return image_bytes, mime
+    from PIL import Image
+    import io
+    img = Image.open(io.BytesIO(image_bytes))
+    img = img.convert("RGB")
+    size = fit_size(img.width, img.height, max_size)
+    if size != (img.width, img.height):
+        img = img.resize(size, Image.LANCZOS)
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=90, progressive=False, optimize=True)
+    return out.getvalue(), "image/jpeg"
 
 
 def group_tracks_into_albums(track_infos):
@@ -176,7 +244,8 @@ def get_with_retry(url, timeout, retries=3, get=None, sleep=time.sleep):
     returned immediately. Returns the last response either way.
     """
     if get is None:
-        get = requests.get
+        def get(u, timeout):
+            return requests.get(u, timeout=timeout, headers=HTTP_HEADERS)
     delay = 2
     for attempt in range(retries + 1):
         resp = get(url, timeout=timeout)
@@ -241,7 +310,49 @@ def embed_artwork(track_path, image_bytes, mime="image/jpeg"):
         raise ValueError(f"Unsupported extension for embedding: {ext}")
 
 
-def process_album(album, apply_changes):
+def fetch_musicbrainz_cover_url(artist, album):
+    """Return a Cover Art Archive front-cover URL for the best matching
+    release group, or None."""
+    resp = get_with_retry(build_musicbrainz_search_url(artist, album),
+                          timeout=10)
+    resp.raise_for_status()
+    mbid = pick_musicbrainz_release_group(resp.json())
+    return caa_front_url(mbid) if mbid else None
+
+
+def find_artwork(album, use_musicbrainz):
+    """Return (url, source description) or (None, reason). Raises on
+    network errors from every source."""
+    errors = []
+    try:
+        data = fetch_itunes_json(album.artist, album.album)
+        url = pick_itunes_artwork(data)
+        if url:
+            first = data["results"][0]
+            return url, (f"iTunes \"{first.get('artistName', '?')} - "
+                         f"{first.get('collectionName', '?')}\"")
+    except requests.RequestException as e:
+        errors.append(f"iTunes: {e}")
+    finally:
+        time.sleep(ITUNES_RATE_LIMIT_SECONDS)
+
+    if use_musicbrainz:
+        try:
+            url = fetch_musicbrainz_cover_url(album.artist, album.album)
+            if url:
+                return url, "MusicBrainz / Cover Art Archive"
+        except requests.RequestException as e:
+            errors.append(f"MusicBrainz: {e}")
+        finally:
+            time.sleep(MUSICBRAINZ_RATE_LIMIT_SECONDS)
+
+    if errors:
+        raise requests.RequestException("; ".join(errors))
+    return None, None
+
+
+def process_album(album, apply_changes, use_musicbrainz=True,
+                  max_size=None, write_cover_file=False):
     """Report (and optionally fix) one album. Returns a status string:
     'skipped' | 'found' | 'embedded' | 'not-found' | 'error'."""
     embedded_flags = [has_embedded_art(t) for t in album.tracks]
@@ -255,31 +366,31 @@ def process_album(album, apply_changes):
         return "not-found"
 
     try:
-        data = fetch_itunes_json(album.artist, album.album)
+        artwork_url, source = find_artwork(album, use_musicbrainz)
     except requests.RequestException as e:
-        print(f"  ! iTunes lookup failed for {album.artist} - {album.album}: {e}")
+        print(f"  ! lookup failed for {album.artist} - {album.album}: {e}")
         return "error"
-    finally:
-        time.sleep(ITUNES_RATE_LIMIT_SECONDS)
 
-    artwork_url = pick_itunes_artwork(data)
     if not artwork_url:
         print(f"  x not found: {album.artist} - {album.album}")
         return "not-found"
 
-    match_name = data["results"][0].get("collectionName", "?")
-    match_artist = data["results"][0].get("artistName", "?")
-    print(f"  > found: {album.artist} - {album.album}"
-          f"  ->  matched \"{match_artist} - {match_name}\"")
+    print(f"  > found: {album.artist} - {album.album}  ->  {source}")
 
     if not apply_changes:
         return "found"
 
     try:
-        image_bytes = download_image(artwork_url)
+        image_bytes, mime = prepare_image(download_image(artwork_url),
+                                          max_size)
         for track in album.tracks:
-            embed_artwork(track, image_bytes)
+            embed_artwork(track, image_bytes, mime)
         print(f"    embedded into {len(album.tracks)} track(s)")
+        if write_cover_file and mime == "image/jpeg":
+            cover_path = os.path.join(album.dir_path, "cover.jpg")
+            with open(cover_path, "wb") as f:
+                f.write(image_bytes)
+            print(f"    wrote {cover_path}")
         return "embedded"
     except Exception as e:
         print(f"  ! failed to embed artwork for {album.dir_path}: {e}")
@@ -292,6 +403,17 @@ def main(argv=None):
                         "(e.g. the mounted iPod's /Music folder)")
     parser.add_argument("--apply", action="store_true",
                         help="download and embed artwork (default: dry-run report only)")
+    parser.add_argument("--no-musicbrainz", action="store_true",
+                        help="do not fall back to MusicBrainz / Cover Art "
+                             "Archive when iTunes has no match")
+    parser.add_argument("--max-size", type=int, metavar="PX",
+                        help="downscale art to at most PX on its longest "
+                             "side and re-encode as baseline JPEG "
+                             "(needs Pillow; e.g. 500)")
+    parser.add_argument("--write-cover-file", action="store_true",
+                        help="also write cover.jpg into each album folder "
+                             "(JPEG art only; use with --max-size to "
+                             "guarantee JPEG)")
     args = parser.parse_args(argv)
 
     def report_progress(count):
@@ -305,7 +427,10 @@ def main(argv=None):
 
     counts = {}
     for album in albums:
-        status = process_album(album, args.apply)
+        status = process_album(album, args.apply,
+                               use_musicbrainz=not args.no_musicbrainz,
+                               max_size=args.max_size,
+                               write_cover_file=args.write_cover_file)
         counts[status] = counts.get(status, 0) + 1
 
     print()

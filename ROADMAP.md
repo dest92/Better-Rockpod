@@ -215,7 +215,7 @@ Rockpod's Storage Mode and enhanced power management are iPod Classic
 strategies to the PP5022-based iPod Video. Board-level work; needs 5G
 hardware for verification.
 
-### 2.5 Album art fetcher improvements — P2, effort S–M
+### 2.5 Album art fetcher improvements — P2, effort S–M ✅ **DONE** (spec 0014)
 
 - **Source:** fork idea (extends `tools/coverart`, spec 0002)
 - **Area:** `tools/coverart/`

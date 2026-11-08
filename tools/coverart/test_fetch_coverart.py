@@ -6,6 +6,7 @@ that doesn't need them. Run with:
 
     python3 -m unittest tools/coverart/test_fetch_coverart.py -v
 """
+import io
 import os
 import tempfile
 import unittest
@@ -15,6 +16,11 @@ from fetch_coverart import (
     TrackInfo,
     album_needs_art,
     build_itunes_search_url,
+    build_musicbrainz_search_url,
+    caa_front_url,
+    fit_size,
+    pick_musicbrainz_release_group,
+    prepare_image,
     folder_has_cover_file,
     get_with_retry,
     group_tracks_into_albums,
@@ -229,6 +235,87 @@ class GetWithRetryTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
         self.assertEqual(len(calls), 1)
         self.assertEqual(sleeps, [])
+
+
+class MusicBrainzTest(unittest.TestCase):
+    def test_search_url_quotes_fields(self):
+        url = build_musicbrainz_search_url("Sigur Rós", 'Ágætis "byrjun"')
+        self.assertIn("musicbrainz.org/ws/2/release-group/", url)
+        self.assertIn("fmt=json", url)
+        self.assertIn("Sigur", url)
+        self.assertNotIn(" ", url)
+
+    def test_pick_best_score_above_threshold(self):
+        data = {"release-groups": [
+            {"id": "low", "score": 60},
+            {"id": "best", "score": 98},
+            {"id": "ok", "score": 91},
+        ]}
+        self.assertEqual(pick_musicbrainz_release_group(data), "best")
+
+    def test_pick_none_when_all_weak_or_empty(self):
+        self.assertIsNone(pick_musicbrainz_release_group(
+            {"release-groups": [{"id": "x", "score": 50}]}))
+        self.assertIsNone(pick_musicbrainz_release_group({}))
+        self.assertIsNone(pick_musicbrainz_release_group(
+            {"release-groups": [{"score": 100}]}))
+
+    def test_caa_url(self):
+        self.assertEqual(caa_front_url("abc", 500),
+                         "https://coverartarchive.org/release-group/abc/front-500")
+
+
+class FitSizeTest(unittest.TestCase):
+    def test_no_upscale(self):
+        self.assertEqual(fit_size(300, 200, 600), (300, 200))
+
+    def test_scales_longest_side(self):
+        self.assertEqual(fit_size(1200, 800, 600), (600, 400))
+        self.assertEqual(fit_size(800, 1600, 400), (200, 400))
+
+    def test_never_zero(self):
+        self.assertEqual(fit_size(10000, 1, 100), (100, 1))
+
+
+def _image_bytes(fmt, size, progressive=False):
+    from PIL import Image
+    img = Image.new("RGB", size, (200, 30, 30))
+    out = io.BytesIO()
+    if fmt == "JPEG":
+        img.save(out, fmt, progressive=progressive)
+    else:
+        img.save(out, fmt)
+    return out.getvalue()
+
+
+class PrepareImageTest(unittest.TestCase):
+    def setUp(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("Pillow not installed")
+
+    def test_passthrough_without_max_size(self):
+        data = _image_bytes("JPEG", (1000, 1000))
+        out, mime = prepare_image(data, None)
+        self.assertEqual(out, data)
+        self.assertEqual(mime, "image/jpeg")
+
+    def test_resizes_and_reencodes_baseline_jpeg(self):
+        from PIL import Image
+        data = _image_bytes("JPEG", (1200, 900), progressive=True)
+        out, mime = prepare_image(data, 600)
+        img = Image.open(io.BytesIO(out))
+        self.assertEqual(img.size, (600, 450))
+        self.assertEqual(img.format, "JPEG")
+        self.assertFalse(img.info.get("progressive") or img.info.get("progression"))
+        self.assertEqual(mime, "image/jpeg")
+
+    def test_png_converted_to_jpeg(self):
+        from PIL import Image
+        out, mime = prepare_image(_image_bytes("PNG", (300, 300)), 600)
+        self.assertEqual(Image.open(io.BytesIO(out)).format, "JPEG")
+        self.assertEqual(mime, "image/jpeg")
 
 
 if __name__ == "__main__":

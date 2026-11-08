@@ -45,8 +45,8 @@ still work and take priority, so existing libraries are unaffected.
 
 A companion PC-side tool for the tracks that still have no art at all —
 neither embedded nor a folder cover file. It scans a music library, looks up
-missing albums on the iTunes Search API, and embeds the matched artwork into
-every track of the album.
+missing albums on the iTunes Search API (falling back to MusicBrainz / Cover
+Art Archive), and embeds the matched artwork into every track of the album.
 
 ```bash
 pip install -r tools/coverart/requirements.txt
@@ -56,7 +56,15 @@ python3 tools/coverart/fetch_coverart.py /path/to/music
 
 # Apply — downloads and embeds the matched artwork
 python3 tools/coverart/fetch_coverart.py /path/to/music --apply
+
+# Recommended for the iPod: 500px baseline JPEG, plus cover.jpg per folder
+python3 tools/coverart/fetch_coverart.py /path/to/music --apply \
+    --max-size 500 --write-cover-file
 ```
+
+`--max-size` needs Pillow and re-encodes the art as baseline JPEG, which
+Rockbox's JPEG decoder requires (it cannot decode progressive JPEGs).
+`--no-musicbrainz` disables the fallback.
 
 Point `/path/to/music` at the iPod's music folder while it's connected in
 disk mode (e.g. `/mnt/g/Music` on WSL, `E:\Music` on Windows,
