@@ -225,7 +225,7 @@ as a fallback when iTunes Search misses, resize/re-encode oversized art to a
 target resolution before embedding, and an option to also write `cover.jpg`
 for folder-based themes.
 
-### 2.6 H.264/JPEG hardware decoding (continue PoC) — P2, effort L
+### 2.6 H.264/JPEG hardware decoding (continue PoC) — P2, effort L ✅ **DONE** (spec 0017, upstream player ported; on-device check pending)
 
 - **Source:** [rockpod#21](https://github.com/nuxcodes/rockpod/issues/21)
   + this repo's `h264_poc` plugin

@@ -89,3 +89,10 @@ Verification: `make -C tests` is green. The simulator, `ipod6g` and
 `ipodvideo` build. Simulator playback of FLAC (embedded art), ALAC (m4a)
 and MP3 (ID3 APIC art) works, with art decoded and dynamic colors
 applied.
+
+## Batch 2: hardware H.264 (roadmap 2.6), 2026-11-08
+
+`064c16536`, `e0136bc7f` and `d27af08ff` were cherry-picked. Their
+prerequisites were adapted by hand in `cd14097155`: `panicf` in the
+plugin and codec APIs (from `9ac6edf75`), the pre-`mixer_play_cbs`
+mixer call, and `UINT32_C`. See `specs/0017-hw-h264-player.md`.
