@@ -26,6 +26,7 @@
 #include "plugin.h"
 #include "albumart.h"
 #include "aa_source.h"
+#include "pf_stage.h"
 #include "lib/read_image.h"
 #include "lib/pluginlib_actions.h"
 #include "lib/pluginlib_exit.h"
@@ -242,6 +243,12 @@ static pix_t pf_lst_color;    /* selector text color */
 static unsigned int pf_bg_rb;  /* pf_bg_color & 0xf81f */
 static unsigned int pf_bg_g;   /* pf_bg_color & 0x7e0 */
 
+#ifdef HAVE_LCD_COLOR
+static int pf_stage_height;
+static int pf_stage_floor;
+static void pf_build_stage(int height, int floor_y);
+#endif
+
 #ifdef HAVE_ALBUMART
 static void pf_update_dynamic_colors(void)
 {
@@ -252,6 +259,8 @@ static void pf_update_dynamic_colors(void)
     pf_lst_color = (pix_t)rb->dynamic_colors_resolve(rb->global_settings->lst_color);
     pf_bg_rb = pf_bg_color & 0xf81f;
     pf_bg_g  = pf_bg_color & 0x7e0;
+    if (pf_stage_height > 0)
+        pf_build_stage(pf_stage_height, pf_stage_floor);
 }
 #endif
 
@@ -269,6 +278,38 @@ static inline pix_t pf_color_mix(int brightness)
         bg_g + (fg_g - bg_g) * brightness / 255,
         bg_b + (fg_b - bg_b) * brightness / 255
     );
+}
+
+/* Stage background: one colour per row, the theme background lit by its
+ * selector colour behind the covers and plain from the reflection line
+ * down, so faded reflections still blend into it. */
+static pix_t pf_stage_rows[LCD_HEIGHT];
+
+static void pf_build_stage(int height, int floor_y)
+{
+    int bg_r = RGB_UNPACK_RED(pf_bg_color);
+    int bg_g = RGB_UNPACK_GREEN(pf_bg_color);
+    int bg_b = RGB_UNPACK_BLUE(pf_bg_color);
+    int ac_r = RGB_UNPACK_RED(pf_lss_color);
+    int ac_g = RGB_UNPACK_GREEN(pf_lss_color);
+    int ac_b = RGB_UNPACK_BLUE(pf_lss_color);
+    int glow_y = floor_y * 55 / 100;
+    if (height > LCD_HEIGHT)
+        height = LCD_HEIGHT;
+    for (int y = 0; y < height; y++)
+    {
+        int w = pf_stage_weight(y, glow_y, floor_y);
+        pf_stage_rows[y] = LCD_RGBPACK(bg_r + (ac_r - bg_r) * w / 256,
+                                       bg_g + (ac_g - bg_g) * w / 256,
+                                       bg_b + (ac_b - bg_b) * w / 256);
+    }
+    /* a faint glass edge where the covers stand */
+    if (floor_y > 0 && floor_y <= height)
+        pf_stage_rows[floor_y - 1] = LCD_RGBPACK(bg_r + (ac_r - bg_r) * 3 / 8,
+                                                 bg_g + (ac_g - bg_g) * 3 / 8,
+                                                 bg_b + (ac_b - bg_b) * 3 / 8);
+    pf_stage_height = height;
+    pf_stage_floor = floor_y;
 }
 #endif
 
@@ -3265,6 +3306,22 @@ static inline pix_t fade_color(pix_t c, unsigned a)
  * unlike lcd_fillrect(DRMODE_SOLID) which fills with fg_pattern. */
 static void pf_clear_display(void)
 {
+#ifdef HAVE_LCD_COLOR
+    if (pf_stage_height > 0)
+    {
+        unsigned fg = rb->lcd_get_foreground();
+        int mode = rb->lcd_get_drawmode();
+        rb->lcd_set_drawmode(DRMODE_SOLID);
+        for (int y = 0; y < pf_stage_height; y++)
+        {
+            rb->lcd_set_foreground(pf_stage_rows[y]);
+            rb->lcd_hline(0, LCD_WIDTH - 1, y);
+        }
+        rb->lcd_set_foreground(fg);
+        rb->lcd_set_drawmode(mode);
+        return;
+    }
+#endif
     rb->screens[SCREEN_MAIN]->clear_viewport();
 }
 
@@ -4869,6 +4926,23 @@ static bool start_playback(bool return_to_WPS)
 /**
    Draw the current album name
  */
+/* Album and artist lines get a soft drop shadow, like the theme's titles */
+static void pf_puts_shadowed(int x, int y, const char *text)
+{
+#ifdef HAVE_LCD_COLOR
+    unsigned fg = rb->lcd_get_foreground();
+    int mode = rb->lcd_get_drawmode();
+    rb->lcd_set_drawmode(DRMODE_FG);
+    rb->lcd_set_foreground(LCD_RGBPACK(0, 0, 0));
+    mylcd_putsxy(x + 1, y + 1, text);
+    rb->lcd_set_foreground(fg);
+    mylcd_putsxy(x, y, text);
+    rb->lcd_set_drawmode(mode);
+#else
+    mylcd_putsxy(x, y, text);
+#endif
+}
+
 static void draw_album_text(void)
 {
     char album_and_year[MAX_PATH];
@@ -4957,16 +5031,16 @@ static void draw_album_text(void)
         /* iPod Classic 6G custom: compare seek (unique per album) instead
            of name_idx (byte offset that can collide after sort/dedup) */
         if (pf_idx.album_index[albumtxt_index].seek != pf_idx.album_untagged_seek)
-            mylcd_putsxy(albumtxt_x, albumtxt_y, album_and_year);
+            pf_puts_shadowed(albumtxt_x, albumtxt_y, album_and_year);
 
         artisttxt = get_album_artist(albumtxt_index);
         if (album_changed)
             set_scroll_line(artisttxt, PF_SCROLL_ARTIST);
         artisttxt_x = get_scroll_line_offset(PF_SCROLL_ARTIST);
         int y_offset = char_height * 3 / 4;
-        mylcd_putsxy(artisttxt_x, albumtxt_y + y_offset, artisttxt);
+        pf_puts_shadowed(artisttxt_x, albumtxt_y + y_offset, artisttxt);
     } else {
-        mylcd_putsxy(albumtxt_x, albumtxt_y, album_and_year);
+        pf_puts_shadowed(albumtxt_x, albumtxt_y, album_and_year);
     }
 }
 
@@ -5038,6 +5112,7 @@ static bool init(void)
 #endif
     pf_bg_rb = pf_bg_color & 0xf81f;
     pf_bg_g  = pf_bg_color & 0x7e0;
+    pf_build_stage(pf_height, pf_half_height + pf_display_offs);
 #endif
 
 
