@@ -41,6 +41,14 @@ No separate `cover.jpg` is required anymore: albums whose tracks carry
 embedded artwork show up in Cover Flow automatically. Folder image files
 still work and take priority, so existing libraries are unaffected.
 
+### Aero7 theme (`themes/Aero7`)
+
+A Frutiger Aero / Windows 7 glass theme for both iPods. It has a glass
+taskbar, a frosted menu window with Explorer-style selection, and a
+glass Now Playing card with a Media Player style orb. Copy
+`themes/Aero7/.rockbox/` to the iPod and pick it under **Theme
+Settings**. See `themes/Aero7/README.md`.
+
 ### Album Art Fetcher (`tools/coverart`)
 
 A companion PC-side tool for the tracks that still have no art at all —
