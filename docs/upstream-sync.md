@@ -96,3 +96,20 @@ applied.
 prerequisites were adapted by hand in `cd14097155`: `panicf` in the
 plugin and codec APIs (from `9ac6edf75`), the pre-`mixer_play_cbs`
 mixer call, and `UINT32_C`. See `specs/0017-hw-h264-player.md`.
+
+## Batch 3: deferred fixes, 2026-11-10
+
+- `0ed3734e5` flac: frames larger than one buffer request. Cherry-picked;
+  the fork's unconditional frame counter was kept. With MAX_BLOCKSIZE
+  4608, 24-bit stereo frames stay under the 32 KiB guarantee, so on these
+  targets it is a safety net plus an overrun check. Hi-res (96/192 kHz)
+  noise FLACs played through in the simulator.
+- `eb4cad520` dsp biquad low bits: applied with a 3-way merge around the
+  unrelated `$Id$`/`.type` cleanups. This fixes a DC offset in the low
+  EQ bands on the iPods (ARM assembly).
+- `790d28274` refused database search: ported by hand to this tree's
+  `tagtree.c`, including this fork's multiselection loop. The
+  pictureflow part applied cleanly.
+- `ecdeb02dd` 44.1 kHz floor: not applicable. This tree's
+  `audio_guess_frequency()` never selects a rate below 44.1 kHz.
+- `e15451815` tagcache loop: already fixed in this tree.
