@@ -20,6 +20,15 @@ CI, but several haven't been confirmed on real hardware yet. See
 
 ## New
 
+- **Aero7 theme** (Frutiger Aero / Windows 7 glass) with a transparent
+  menu list, glass Now Playing card and dock. It ships in the zip; pick it
+  under Theme Settings.
+- **Boost While Navigating** (Settings → General → System): the CPU runs
+  at full speed while you scroll and enter menus, and drops back a
+  second after the last input.
+- **Cover Flow stage:** a lit gradient background, a glass edge and
+  shadowed titles.
+
 - **Shuffle Albums** (Settings → Playback): random album order, each
   album in track order. Resume keeps the order.
 - **[By album, random order]** in the database, like the stock iPod.
@@ -41,6 +50,8 @@ CI, but several haven't been confirmed on real hardware yet. See
 - 6G: the drive is no longer powered down before its write cache is
   flushed (upstream).
 - Dynamic colors: no mixed colors within a frame during fades.
+- More upstream fixes: oversized FLAC frames, the DC offset in the ARM
+  EQ filter, and database crashes during a commit.
 - 39 upstream Rockbox fixes: FLAC, ALAC, JPEG album art, metadata,
   playlist and database robustness, and click-wheel recovery on the 5G.
 - Low-battery shutdown debounce, battery calibration, disk-locality
