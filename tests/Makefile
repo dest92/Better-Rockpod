@@ -21,7 +21,7 @@ SAN := -fsanitize=address,undefined -fno-sanitize=shift \
        -fno-sanitize-recover=all -fno-omit-frame-pointer
 CFLAGS := -std=gnu99 -W -Wall -Wextra -g -O1 $(SAN) -I.
 
-TESTS := fixedpoint pf_aa_source aa_color_math shuffle_locality lowbatt_debounce battcurve playlist_viewer_format album_shuffle aa_fade multiselect
+TESTS := fixedpoint pf_aa_source aa_color_math shuffle_locality lowbatt_debounce battcurve playlist_viewer_format album_shuffle aa_fade multiselect ui_boost
 
 test_fixedpoint_SRCS := $(ROOT)/lib/fixedpoint/fixedpoint.c
 test_fixedpoint_CFLAGS := -I$(ROOT)/lib/fixedpoint
@@ -43,6 +43,8 @@ test_album_shuffle_CFLAGS := -I$(ROOT)/apps
 test_aa_fade_CFLAGS := -I$(ROOT)/apps/gui/skin_engine
 
 test_multiselect_CFLAGS := -I$(ROOT)/apps/gui
+
+test_ui_boost_CFLAGS := -I$(ROOT)/apps
 
 .PHONY: all build run clean
 

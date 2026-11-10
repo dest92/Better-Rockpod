@@ -321,6 +321,9 @@ MAKE_MENU(disk_menu, ID2P(LANG_DISK_MENU), 0, Icon_NOICON,
 MENUITEM_SETTING(max_files_in_dir, &global_settings.max_files_in_dir, NULL);
 MENUITEM_SETTING(max_files_in_playlist, &global_settings.max_files_in_playlist, NULL);
 MENUITEM_SETTING(default_glyphs, &global_settings.glyphs_to_cache, NULL);
+#ifdef HAVE_ADJUSTABLE_CPU_FREQ
+MENUITEM_SETTING(ui_boost, &global_settings.ui_boost, NULL);
+#endif
 MAKE_MENU(limits_menu, ID2P(LANG_LIMITS_MENU), 0, Icon_NOICON,
            &max_files_in_dir, &max_files_in_playlist
            ,&default_glyphs
@@ -422,6 +425,9 @@ MAKE_MENU(system_menu, ID2P(LANG_SYSTEM),
             &disk_menu,
 #endif
             &limits_menu,
+#ifdef HAVE_ADJUSTABLE_CPU_FREQ
+            &ui_boost,
+#endif
 #ifdef HAVE_PERCEPTUAL_VOLUME
             &volume_adjust_mode,
             &volume_adjust_norm_steps,

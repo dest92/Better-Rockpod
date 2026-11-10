@@ -17279,3 +17279,17 @@
     *: "All folders from current selection"
   </voice>
 </phrase>
+<phrase>
+  id: LANG_UI_BOOST
+  desc: in system settings: boost the CPU while the user navigates
+  user: core
+  <source>
+    *: "Boost While Navigating"
+  </source>
+  <dest>
+    *: "Boost While Navigating"
+  </dest>
+  <voice>
+    *: "Boost While Navigating"
+  </voice>
+</phrase>

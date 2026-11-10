@@ -1098,6 +1098,9 @@ const struct settings_list settings[] = {
                   "disk shuffle", NULL),
     OFFON_SETTING(0, album_shuffle, LANG_ALBUM_SHUFFLE, false,
                   "album shuffle", NULL),
+#ifdef HAVE_ADJUSTABLE_CPU_FREQ
+    OFFON_SETTING(0, ui_boost, LANG_UI_BOOST, true, "ui boost", NULL),
+#endif
 
     CHOICE_SETTING(F_CB_ON_SELECT_ONLY|F_CB_ONLY_IF_CHANGED, repeat_mode,
                    LANG_REPEAT, REPEAT_OFF, "repeat", "off,all,one,shuffle"

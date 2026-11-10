@@ -54,6 +54,7 @@
 
 /*#define LOGF_ENABLE*/
 #include "logf.h"
+#include "ui_boost.h"
 
 #define REPEAT_WINDOW_TICKS HZ/4
 #define ACTION_FILTER_TICKS HZ/2 /* timeout between filtered actions SL/BL */
@@ -311,6 +312,40 @@ static void action_handle_backlight(bool backlight, bool ignore_next)
 
 #endif /*defined(HAVE_BACKLIGHT) || !defined(HAS_BUTTON_HOLD) HELPER FUNCTIONS*/
 
+#ifdef HAVE_ADJUSTABLE_CPU_FREQ
+/* Interaction boost (specs/0020-ui-interaction-boost.md): input boosts the
+ * CPU until UI_BOOST_HOLD after the last event, covering the work it
+ * triggers such as entering and loading a menu. Only this thread boosts. */
+static struct ui_boost_state ui_boost_state;
+
+static long ui_boost_tick(void)
+{
+    return current_tick;
+}
+
+static void ui_boost_cpu(bool on)
+{
+    cpu_boost(on);
+}
+
+static bool ui_boost_is_input(long button)
+{
+    return !(button & SYS_EVENT) && button != BUTTON_REDRAW;
+}
+
+static long ui_boost_button_get(int timeout)
+{
+    struct ui_boost_ops ops = {
+        .get = button_get_w_tmo, .now = ui_boost_tick, .boost = ui_boost_cpu,
+        .is_input = ui_boost_is_input, .enabled = global_settings.ui_boost,
+        .hold = HZ,
+    };
+    return ui_boost_get_button(&ui_boost_state, &ops, timeout);
+}
+#else
+#define ui_boost_button_get(timeout) button_get_w_tmo(timeout)
+#endif /* HAVE_ADJUSTABLE_CPU_FREQ */
+
 /******************************************************************
 * action_poll_button filters button presses for get_action_worker;
 * if button_get_w_tmo returns...
@@ -324,7 +359,7 @@ static inline bool action_poll_button(action_last_t *last, action_cur_t *cur)
     bool ret = true;
     int *button = &cur->button;
 
-    *button = button_get_w_tmo(cur->timeout);
+    *button = ui_boost_button_get(cur->timeout);
 
    /* ********************************************************
     * Can return button immediately, sys_event & multimedia
