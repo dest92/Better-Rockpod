@@ -33,7 +33,8 @@ pre-rendered by a script. To change colors or layout, edit
 
 ```bash
 # Open Sans .fnt files, converted with tools/convttf from the Open Sans
-# TTFs (sizes 15 regular, 12/16 semibold, 20 bold):
+# TTFs (sizes 15 regular, 12/16 semibold, 20 bold), covering U+0020 to
+# U+2122 (-s 32 -l 8482) so dashes, curly quotes and the ellipsis render:
 python3 tools/themes/make_aero7.py --fonts DIR --preview /tmp/aero7.png
 ```
 

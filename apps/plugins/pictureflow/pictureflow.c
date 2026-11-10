@@ -247,6 +247,7 @@ static unsigned int pf_bg_g;   /* pf_bg_color & 0x7e0 */
 static int pf_stage_height;
 static int pf_stage_floor;
 static void pf_build_stage(int height, int floor_y);
+static int pf_stage_floor_y(void);
 #endif
 
 #ifdef HAVE_ALBUMART
@@ -283,31 +284,49 @@ static inline pix_t pf_color_mix(int brightness)
 /* Stage background: one colour per row, the theme background lit by its
  * selector colour behind the covers and plain from the reflection line
  * down, so faded reflections still blend into it. */
-static pix_t pf_stage_rows[LCD_HEIGHT];
+/* four 2x2 ordered-dither variants per row hide RGB565 banding */
+static pix_t pf_stage_rows[LCD_HEIGHT][4];
+
+static inline int pf_stage_q(int v, int t, int levels)
+{
+    int q = (v * levels * 4 + t * 255) / (255 * 4);
+    return q > levels ? levels : q;
+}
+
+static pix_t pf_stage_pack(int r, int g, int b, int t)
+{
+    int r5 = pf_stage_q(r, t, 31), g6 = pf_stage_q(g, t, 63);
+    int b5 = pf_stage_q(b, t, 31);
+    return LCD_RGBPACK((r5 << 3) | (r5 >> 2), (g6 << 2) | (g6 >> 4),
+                       (b5 << 3) | (b5 >> 2));
+}
 
 static void pf_build_stage(int height, int floor_y)
 {
     int bg_r = RGB_UNPACK_RED(pf_bg_color);
     int bg_g = RGB_UNPACK_GREEN(pf_bg_color);
     int bg_b = RGB_UNPACK_BLUE(pf_bg_color);
+    /* the theme selector colour lights the stage */
     int ac_r = RGB_UNPACK_RED(pf_lss_color);
     int ac_g = RGB_UNPACK_GREEN(pf_lss_color);
     int ac_b = RGB_UNPACK_BLUE(pf_lss_color);
     int glow_y = floor_y * 55 / 100;
     if (height > LCD_HEIGHT)
         height = LCD_HEIGHT;
+    static const int bayer[4] = { 0, 2, 3, 1 };
     for (int y = 0; y < height; y++)
     {
         int w = pf_stage_weight(y, glow_y, floor_y);
-        pf_stage_rows[y] = LCD_RGBPACK(bg_r + (ac_r - bg_r) * w / 256,
-                                       bg_g + (ac_g - bg_g) * w / 256,
-                                       bg_b + (ac_b - bg_b) * w / 256);
+        /* a faint glass edge where the covers stand */
+        if (y == floor_y - 1)
+            w = 96;
+        int r = bg_r + (ac_r - bg_r) * w / 256;
+        int g = bg_g + (ac_g - bg_g) * w / 256;
+        int b = bg_b + (ac_b - bg_b) * w / 256;
+        for (int i = 0; i < 4; i++)
+            pf_stage_rows[y][i] = (y >= floor_y) ? pf_bg_color
+                                  : pf_stage_pack(r, g, b, bayer[i]);
     }
-    /* a faint glass edge where the covers stand */
-    if (floor_y > 0 && floor_y <= height)
-        pf_stage_rows[floor_y - 1] = LCD_RGBPACK(bg_r + (ac_r - bg_r) * 3 / 8,
-                                                 bg_g + (ac_g - bg_g) * 3 / 8,
-                                                 bg_b + (ac_b - bg_b) * 3 / 8);
     pf_stage_height = height;
     pf_stage_floor = floor_y;
 }
@@ -806,13 +825,33 @@ static void config_save(int cache_version, bool update_albumart)
     configfile_save(CONFIG_FILE, config, CONFIG_NUM_ITEMS, CONFIG_VERSION);
 }
 
+#define PF_LAYOUT_ZOOM   72
+#define PF_LAYOUT_TUCK   (DISPLAY_WIDTH * 20 / 128)
+#define PF_LAYOUT_MARGIN (DISPLAY_WIDTH * 12 / 128)
+
+/* Configs saved with the old untouched defaults (full-size covers under
+ * the status bar) move to the new layout once; customised ones are kept. */
+static void config_migrate_layout(struct pf_config_t *cfg)
+{
+    if (cfg->zoom == 100 && cfg->slide_tuck == DISPLAY_WIDTH / 4 &&
+        cfg->center_margin == 0)
+    {
+        cfg->zoom = PF_LAYOUT_ZOOM;
+        cfg->slide_tuck = PF_LAYOUT_TUCK;
+        cfg->center_margin = PF_LAYOUT_MARGIN;
+        cfg->show_statusbar = false;
+        cfg->show_year = true;
+    }
+}
+
 static void config_set_defaults(struct pf_config_t *cfg)
 {
      cfg->slide_spacing = DISPLAY_WIDTH / 4;  /* kept for config compat */
-     cfg->center_margin = 0;
-     cfg->slide_tuck = DISPLAY_WIDTH / 4;
+     /* iPod-like layout: smaller covers with room around them */
+     cfg->center_margin = PF_LAYOUT_MARGIN;
+     cfg->slide_tuck = PF_LAYOUT_TUCK;
      cfg->num_slides = 4;   /* 3 visible + 1 animation buffer per side */
-     cfg->zoom = 100;
+     cfg->zoom = PF_LAYOUT_ZOOM;
      cfg->show_fps = false;
      cfg->auto_wps = 0;
      cfg->last_album = 0;
@@ -823,14 +862,23 @@ static void config_set_defaults(struct pf_config_t *cfg)
         ? ALBUM_AND_ARTIST_BOTTOM : ALBUM_NAME_BOTTOM;
      cfg->sort_albums_by = SORT_BY_ARTIST_AND_NAME;
      cfg->year_sort_order = ASCENDING;
-     cfg->show_year = false;
+     cfg->show_year = true;
      cfg->parallel_slides = true;
-     cfg->show_statusbar = true;
+     cfg->show_statusbar = false;
      cfg->update_albumart = false;
      cfg->scroll_speed = 200;
      cfg->transition_speed = 200;
      cfg->text_crossfade = true;
 }
+
+/* row where the centre cover ends and its reflection starts: covers
+ * scale about pf_half_height with the zoom setting */
+#ifdef HAVE_LCD_COLOR
+static int pf_stage_floor_y(void)
+{
+    return pf_half_height + pf_display_offs * pf_cfg.zoom / 100;
+}
+#endif
 
 static inline PFreal fmul(PFreal a, PFreal b)
 {
@@ -3304,21 +3352,22 @@ static inline pix_t fade_color(pix_t c, unsigned a)
 /* Clear only the PictureFlow viewport area (not the status bar).
  * Uses screen->clear_viewport() which fills with bg_pattern,
  * unlike lcd_fillrect(DRMODE_SOLID) which fills with fg_pattern. */
+#if LCD_STRIDEFORMAT == VERTICAL_STRIDE
+#define STAGEADDR(x, y) (&buffer[BUFFER_HEIGHT*(x) + (y)])
+#else
+#define STAGEADDR(x, y) (&buffer[(y)*BUFFER_WIDTH + (x)])
+#endif
 static void pf_clear_display(void)
 {
 #ifdef HAVE_LCD_COLOR
     if (pf_stage_height > 0)
     {
-        unsigned fg = rb->lcd_get_foreground();
-        int mode = rb->lcd_get_drawmode();
-        rb->lcd_set_drawmode(DRMODE_SOLID);
         for (int y = 0; y < pf_stage_height; y++)
         {
-            rb->lcd_set_foreground(pf_stage_rows[y]);
-            rb->lcd_hline(0, LCD_WIDTH - 1, y);
+            const pix_t *v = pf_stage_rows[y] + ((y & 1) << 1);
+            for (int x = 0; x < LCD_WIDTH; x++)
+                *STAGEADDR(x, y) = v[x & 1];
         }
-        rb->lcd_set_foreground(fg);
-        rb->lcd_set_drawmode(mode);
         return;
     }
 #endif
@@ -4019,6 +4068,9 @@ static int display_settings_menu(void)
                 rb->set_int(rb->str(LANG_ZOOM), "", 1, &pf_cfg.zoom,
                             NULL, 1, 10, 300, NULL );
                 adjust_album_display_for_setting(old_val, pf_cfg.zoom);
+#ifdef HAVE_LCD_COLOR
+                pf_build_stage(pf_stage_height, pf_stage_floor_y());
+#endif
                 break;
             case 4:
                 old_val = pf_cfg.parallel_slides;
@@ -5038,7 +5090,14 @@ static void draw_album_text(void)
             set_scroll_line(artisttxt, PF_SCROLL_ARTIST);
         artisttxt_x = get_scroll_line_offset(PF_SCROLL_ARTIST);
         int y_offset = char_height * 3 / 4;
+#ifdef HAVE_LCD_COLOR
+        unsigned album_fg = rb->lcd_get_foreground();
+        mylcd_set_foreground(pf_color_mix(c * 170 / 255));
+#endif
         pf_puts_shadowed(artisttxt_x, albumtxt_y + y_offset, artisttxt);
+#ifdef HAVE_LCD_COLOR
+        mylcd_set_foreground(album_fg);
+#endif
     } else {
         pf_puts_shadowed(albumtxt_x, albumtxt_y, album_and_year);
     }
@@ -5072,6 +5131,7 @@ static bool init(void)
 
     config_set_defaults(&pf_cfg); /* must appear before configfile_save */
     configfile_load(CONFIG_FILE, config, CONFIG_NUM_ITEMS, CONFIG_VERSION);
+    config_migrate_layout(&pf_cfg);
 
     /* Compute viewport and rendering layout based on show_statusbar setting */
     if (pf_cfg.show_statusbar)
@@ -5112,7 +5172,7 @@ static bool init(void)
 #endif
     pf_bg_rb = pf_bg_color & 0xf81f;
     pf_bg_g  = pf_bg_color & 0x7e0;
-    pf_build_stage(pf_height, pf_half_height + pf_display_offs);
+    pf_build_stage(pf_height, pf_stage_floor_y());
 #endif
 
 

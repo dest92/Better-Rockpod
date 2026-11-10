@@ -1,4 +1,4 @@
-# 0021: Cover Flow "stage" background and shadowed titles
+# 0021: Cover Flow redesign: iPod-like layout, stage background, titles
 
 - **Status:** Implemented (on-device look and frame-rate check pending)
 - **Branch/PR:** `master` (research/ui-smoothness.md, proposal 4)
@@ -12,16 +12,30 @@ separation from the reflections under it.
 
 ## Requirements
 
+- **R0:** iPod-like layout by default:
+  - full screen (no status bar or theme frame around it);
+  - smaller covers (zoom 72) with more room (tuck 20/128, margin
+    12/128 of the display width);
+  - the year shown.
+  Configs still holding the old untouched defaults are migrated once;
+  customised configs are kept.
+
 - **R1:** Each frame starts from a "stage":
   - a vertical gradient from the theme background, lit by the theme
     selector colour, with a soft light band behind the covers;
   - exactly the plain background from the reflection line down, so
     reflections, which fade to the background colour, stay seamless.
-- **R2:** A faint glass edge, one row, at the reflection line.
-- **R3:** The album and artist lines get a 1 px drop shadow.
-- **R4:** Cost per frame stays small: one precomputed colour per row
-  (`pf_stage_rows[]`), drawn as horizontal lines, with no full-screen
-  image.
+- **R2:** A faint glass edge, one row, at the reflection line. That row
+  depends on the zoom: `pf_half_height + pf_display_offs * zoom / 100`,
+  since covers scale about the centre row.
+- **R2b:** The gradient is 2x2 ordered-dithered into RGB565, so it shows
+  no banding.
+- **R3:** The album and artist lines get a 1 px drop shadow, and the
+  artist is dimmer than the album. Theme fonts must cover U+2013 for the
+  "Album – Year" separator; Aero7's fonts now go up to U+2122.
+- **R4:** Cost per frame stays small: four precomputed dither colours
+  per row (`pf_stage_rows[][4]`), written straight into the frame
+  buffer. That is one store per pixel, the same as the old clear.
 - **R5:** The stage follows theme and dynamic-colour changes.
   Monochrome builds keep the old clear.
 
@@ -46,3 +60,13 @@ separation from the reflections under it.
 - `ipod6g` and `ipodvideo` build.
 - **On device:** animation smoothness on the 5G (80 MHz while
   PictureFlow boosts); the per-row fill is ~240 hline calls per frame.
+
+## Verification (redesign)
+
+- Simulator, starting from an old config (zoom 100, status bar on):
+  - The layout migrated to full screen with smaller covers.
+  - The gradient shows no banding, and the glass edge sits exactly at
+    the covers' base.
+  - "Neon Nights – 2008" shows the dash, and the artist is dimmed.
+  - Mid-animation frames look right.
+- `ipod6g` and `ipodvideo` build; the unit tests are green.
