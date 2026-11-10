@@ -4,16 +4,17 @@ Frutiger Aero / Windows 7 glass theme for Better-Rockpod, 320x240
 (iPod Classic 6G/7G and iPod Video 5G/5.5G).
 
 - **Wallpaper:** deep blue with light ribbons, an aqua glow and bubbles.
-- **Glass:** a taskbar-style top bar, a glass window frame with a
-  frosted content pane, and a translucent Now Playing card and dock.
+- **Glass:** a taskbar-style top bar, plus floating panels with soft
+  shadows and hairline light rims: the menu window with its frosted
+  content pane, the Now Playing card and the dock.
   Each panel blurs and tints the wallpaper under it.
 - **Menus:** Windows 7 Explorer style selection (pale blue gradient,
   blue rim, white inner highlight). Page titles have an Aero text
   shadow.
-- **Now Playing:** album art in a glass bezel (or a glass placeholder
-  tile when a track has none), a glossy aqua progress bar, and a
-  Windows Media Player style play/pause orb with shuffle and repeat
-  indicators.
+- **Now Playing:** album art floating on a soft shadow (or a glass
+  placeholder tile when a track has none), a slim aqua progress bar
+  with a glass knob, and a floating glass dock with a Windows Media
+  Player style play/pause orb plus shuffle and repeat indicators.
 - **Font:** Open Sans (SIL OFL 1.1, see `fonts/OpenSans-OFL.txt`) as an
   open stand-in for Segoe UI.
 

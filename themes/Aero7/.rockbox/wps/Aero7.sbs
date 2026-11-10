@@ -6,10 +6,10 @@
 %V(0,0,-,-,-)
 #
 # Menu list inside the glass window, Windows 7 Explorer selection
-%Vi(-,16,34,288,191,1)
-%Lb(Item,288,26)
-%Vl(Item,0,1,288,24,-)%?Lc<%xd(Sel)>
-%Vl(Item,8,4,272,19,1)%Vf(1b3d63)%Vg(e6f1fe,c7e0fc,1b3d63)%?Lc<%Vs(gradient)>%LT
+%Vi(-,17,36,286,189,1)
+%Lb(Item,286,26)
+%Vl(Item,0,1,286,24,-)%?Lc<%xd(Sel)>
+%Vl(Item,8,4,270,19,1)%Vf(1b3d63)%Vg(e4f1ff,cee4fd,1b3d63)%?Lc<%Vs(gradient)>%LT
 #
 # Page title with a soft shadow, Aero style
 %V(60,3,200,17,2)%Vf(062244)%ac%Lt
