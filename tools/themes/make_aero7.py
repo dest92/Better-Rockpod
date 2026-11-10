@@ -27,11 +27,12 @@ ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "themes", NAME,
 # Layout (shared by the generator and the skins)
 BAR_H = 22                                  # top glass bar
 WIN = (8, 28, 312, 234)                     # menu window (glass frame)
-CONTENT = (13, 33, 307, 229)                # frosted content pane
+CONTENT = (13, 33, 307, 229)                # list area inside the window
 LIST_X, LIST_Y, LIST_W = 17, 36, 286
 ITEM_H = 26
 SEL_H = 24
-SEL_TOP, SEL_BOTTOM = (232, 243, 255, 255), (203, 227, 253, 255)
+SEL_TOP, SEL_BOTTOM = (96, 182, 246, 255), (26, 104, 206, 255)
+TEXT, SEL_TEXT = "ffffff", "ffffff"
 CARD = (8, 28, 312, 172)                    # WPS glass card
 ART = (18, 38, 130, 150)                    # 112x112 album art
 PB = (22, 182, 276, 6)                      # visible progress track
@@ -75,16 +76,24 @@ def with_mask(img, mask):
 
 
 # ---------------------------------------------------------------- wallpaper
-def wallpaper():
-    """Windows 7 inspired: deep blue sky, light ribbons, aero glow, bubbles."""
-    bg = vgradient(W * SS, H * SS, (6, 40, 112, 255), (20, 116, 196, 255))
+def wallpaper(phase=0.0):
+    """Windows 7 inspired: deep blue sky, light ribbons, aero glow, bubbles.
+    phase (0..1) drifts the ribbons and glows, for animated backdrops; the
+    animation loops seamlessly from phase 1 back to 0."""
+    tau = 2 * math.pi * phase
+    # the sky slowly shifts hue: blue -> teal -> soft violet -> blue
+    top = lerp((6, 40, 112, 255), (4, 70, 110, 255), (1 - math.cos(tau)) / 2)
+    bottom = lerp((20, 116, 196, 255), (60, 96, 205, 255), (1 - math.cos(tau * 2)) / 4)
+    bg = vgradient(W * SS, H * SS, top, bottom)
     # radial glow, upper left (the Win7 "light source")
     glow = big(W, H)
     gd = ImageDraw.Draw(glow)
     for i in range(40, 0, -1):
         r = i * 7 * SS
         a = int(5 + (40 - i) * 0.9)
-        gd.ellipse([70 * SS - r, 40 * SS - r, 70 * SS + r, 40 * SS + r],
+        gx = 90 + 110 * math.sin(tau)
+        gy = 50 + 35 * math.cos(tau)
+        gd.ellipse([gx * SS - r, gy * SS - r, gx * SS + r, gy * SS + r],
                    fill=(120, 200, 255, a))
     bg.alpha_composite(glow.filter(ImageFilter.GaussianBlur(14 * SS)))
     # flowing light ribbons
@@ -97,13 +106,15 @@ def wallpaper():
             (20, 184, (90, 245, 205, 55), 18)]):
         pts = []
         for x in range(-20, W + 21, 4):
-            y = off + amp * math.sin((x + k * 40) / 62.0) - x * 0.18
+            y = (off + amp * math.sin((x + k * 40) / 62.0 + tau * (1 + k % 2))
+                 - x * 0.18)
             pts.append((x * SS, y * SS))
         rd.line(pts, fill=col, width=wid * SS, joint="curve")
     bg.alpha_composite(rib.filter(ImageFilter.GaussianBlur(8 * SS)))
     # Frutiger Aero green-teal glow at the bottom right
     aur = big(W, H)
-    ImageDraw.Draw(aur).ellipse([150 * SS, 175 * SS, 420 * SS, 330 * SS],
+    ax = 120 - 110 * math.sin(tau)
+    ImageDraw.Draw(aur).ellipse([ax * SS, 175 * SS, (ax + 270) * SS, 330 * SS],
                                 fill=(70, 230, 160, 110))
     bg.alpha_composite(aur.filter(ImageFilter.GaussianBlur(28 * SS)))
     # bubbles
@@ -165,30 +176,17 @@ def top_bar(base):
     base.alpha_composite(line)
 
 
-def menu_backdrop():
-    base = wallpaper()
+def menu_backdrop(phase=0.0):
+    base = wallpaper(phase)
     top_bar(base)
-    glass(base, WIN, 12, (170, 210, 245, 55), shadow=True)
-    # Frosted content pane: the wallpaper shows through, blurred enough
-    # that dark text stays readable on it
-    x0, y0, x1, y1 = CONTENT
-    under = base.crop(CONTENT).filter(ImageFilter.GaussianBlur(10))
-    frost = vgradient(x1 - x0, y1 - y0, (250, 252, 255, 196),
-                      (228, 241, 255, 170))
-    pane = Image.alpha_composite(under, frost)
-    base.paste(pane, (x0, y0), rounded_mask(x1 - x0, y1 - y0, 8))
-    edge = big(x1 - x0, y1 - y0)
-    ImageDraw.Draw(edge).rounded_rectangle(
-        [0, 0, (x1 - x0) * SS - 1, (y1 - y0) * SS - 1], 8 * SS,
-        outline=(90, 130, 180, 90), width=SS)
-    layer = Image.new("RGBA", base.size)
-    layer.paste(down(edge, x1 - x0, y1 - y0), (x0, y0))
-    base.alpha_composite(layer)
+    # the list floats on dark tinted glass: the (animated) wallpaper shows
+    # through, blurred just enough to keep white text readable
+    glass(base, WIN, 12, (6, 28, 66, 96), shadow=True, blur=7)
     return base
 
 
-def wps_backdrop():
-    base = wallpaper()
+def wps_backdrop(phase=0.0):
+    base = wallpaper(phase)
     top_bar(base)
     glass(base, CARD, 12, (6, 30, 70, 90), shadow=True)
     # album art floats on a soft shadow with a hairline light rim
@@ -223,9 +221,9 @@ def selection_bar():
     edge = big(w, h)
     ed = ImageDraw.Draw(edge)
     ed.rounded_rectangle([0, 0, w * SS - 1, h * SS - 1], 7 * SS,
-                         outline=(120, 170, 225, 230), width=SS)
+                         outline=(150, 210, 255, 230), width=SS)
     ed.rounded_rectangle([SS, SS, w * SS - 1 - SS, h * SS - 1 - SS], 6 * SS,
-                         outline=(255, 255, 255, 140), width=SS)
+                         outline=(255, 255, 255, 110), width=SS)
     return Image.alpha_composite(g, down(edge, w, h))
 
 
@@ -405,18 +403,18 @@ wps: /.rockbox/wps/{n}.wps
 sbs: /.rockbox/wps/{n}.sbs
 backdrop: /.rockbox/backdrops/{n}.bmp
 font: /.rockbox/fonts/15-OpenSans-Regular.fnt
-foreground color: 1b3d63
-background color: f2f7fd
-line selector start color: c4defc
-line selector end color: ebf4fe
-line selector text color: 0b2a4f
+foreground color: ffffff
+background color: 0c2c56
+line selector start color: 60b6f6
+line selector end color: 1a68ce
+line selector text color: ffffff
 selector type: bar (gradient)
 show icons: off
 scrollbar: off
 statusbar: custom
 ui viewport: -
-# The theme has its own palette; album-art recoloring would kill the
-# contrast on the light glass pane.
+# The theme has its own palette; album-art recoloring would fight the
+# glass and the animated wallpaper.
 dynamic colors: off
 """
 
@@ -432,7 +430,7 @@ SBS = """\
 %Vi(-,{lx},{ly},{lw},{lh},1)
 %Lb(Item,{lw},{ih})
 %Vl(Item,0,1,{lw},{sh},-)%?Lc<%xd(Sel)>
-%Vl(Item,8,{ty},{tw},{th},1)%Vf(1b3d63)%Vg({g0},{g1},1b3d63)%?Lc<%Vs(gradient)>%LT
+%Vl(Item,8,{ty},{tw},{th},1)%Vf({tc})%Vg({g0},{g1},{stc})%?Lc<%Vs(gradient)>%LT
 #
 # Page title with a soft shadow, Aero style
 %V(60,3,200,17,2)%Vf(062244)%ac%Lt
@@ -508,7 +506,8 @@ def write_skins(out):
     c1 = lerp(top, bot, (ty - 1 + th - 1) / (SEL_H - 1))
     hexc = lambda c: "%02x%02x%02x" % c[:3]
     fmt = dict(n=NAME, lx=lx, ly=ly, lw=lw, lh=lh, ih=ITEM_H, sh=SEL_H,
-               ty=ty, th=th, tw=lw - 16, g0=hexc(c0), g1=hexc(c1), ax=ART[0], ay=ART[1], aw=ART[2] - ART[0],
+               ty=ty, th=th, tw=lw - 16, g0=hexc(c0), g1=hexc(c1),
+               tc=TEXT, stc=SEL_TEXT, ax=ART[0], ay=ART[1], aw=ART[2] - ART[0],
                ah=ART[3] - ART[1], px=PB[0], py=PB[1], pw=PB[2], ph=PB[3],
                kx=PB[0] - KNOB // 2, ky=PB[1] - (PB_H - PB[3]) // 2,
                kw=PB[2] + KNOB, kh=PB_H,

@@ -5,12 +5,11 @@ Frutiger Aero / Windows 7 glass theme for Better-Rockpod, 320x240
 
 - **Wallpaper:** deep blue with light ribbons, an aqua glow and bubbles.
 - **Glass:** a taskbar-style top bar, plus floating panels with soft
-  shadows and hairline light rims: the menu window with its frosted
-  content pane, the Now Playing card and the dock.
+  shadows and hairline light rims. The menu list sits on transparent
+  dark glass with white text, as do the Now Playing card and the dock.
   Each panel blurs and tints the wallpaper under it.
-- **Menus:** Windows 7 Explorer style selection (pale blue gradient,
-  blue rim, white inner highlight). Page titles have an Aero text
-  shadow.
+- **Menus:** an aqua selection pill with a light rim. Page titles have
+  an Aero text shadow.
 - **Now Playing:** album art floating on a soft shadow (or a glass
   placeholder tile when a track has none), a slim aqua progress bar
   with a glass knob, and a floating glass dock with a Windows Media
@@ -19,7 +18,7 @@ Frutiger Aero / Windows 7 glass theme for Better-Rockpod, 320x240
   open stand-in for Segoe UI.
 
 The theme turns off **dynamic colors**, because album-art recoloring
-would hurt contrast on the light glass pane.
+would fight the glass palette.
 
 ## Install
 

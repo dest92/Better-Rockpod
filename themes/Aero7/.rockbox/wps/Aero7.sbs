@@ -9,7 +9,7 @@
 %Vi(-,17,36,286,189,1)
 %Lb(Item,286,26)
 %Vl(Item,0,1,286,24,-)%?Lc<%xd(Sel)>
-%Vl(Item,8,4,270,19,1)%Vf(1b3d63)%Vg(e4f1ff,cee4fd,1b3d63)%?Lc<%Vs(gradient)>%LT
+%Vl(Item,8,4,270,19,1)%Vf(ffffff)%Vg(57acf1,206fd1,ffffff)%?Lc<%Vs(gradient)>%LT
 #
 # Page title with a soft shadow, Aero style
 %V(60,3,200,17,2)%Vf(062244)%ac%Lt
